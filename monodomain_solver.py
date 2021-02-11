@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 
 
+
 def solver(T, N, dt, tn, Nx, Ny, degree, u0, theta):
 
     mesh = UnitIntervalMesh(Nx)
@@ -86,8 +87,8 @@ def solver(T, N, dt, tn, Nx, Ny, degree, u0, theta):
 
 def run_solver(make_gif):
 
-    theta = 0.5  # =0.5 Strang/CN , =1 Godunov/BE
-    N = 500
+    theta = 0.5  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
+    N = 5000
     Nx = 400
     Ny = 8
     T = 6.0  # [s]
@@ -96,19 +97,26 @@ def run_solver(make_gif):
     u0 = None
 
     tn = 0
+    count = 0
+    skip_frames = 30
+
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
         mesh, u = solver(T, N, dt, tn, Nx, Ny, degree, u0, theta)
         tn += dt
         u0 = u.vector()[:]
 
-        # Create and save plots to file
-        plt.clf()
-        plt.plot(np.load("x0.npy"), u.vector())
-        plt.axis([0, 1, -100, 50])
-        plt.title("i=%d" % i)
 
-        plt.savefig(f"plots/u{i:04d}.png")
+        if i == count:
+            # Create and save every skip_frames'th plots to file
+            plt.clf()
+            plt.plot(np.load("x0.npy"), u.vector())
+            plt.axis([0, 1, -100, 50])
+            plt.title("i=%d" % i)
+
+            plt.savefig(f"plots/u{i:04d}.png")
+            count += skip_frames
+
 
     if make_gif:
 
@@ -120,17 +128,12 @@ def run_solver(make_gif):
         filepath_out = "animation.gif"
 
         # Collecting the plots and putting them in a list
-        img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in)) if f]
-
-        # Make a new list with every 10th plot for the animation
-        new_imgs = []
-        for i in range(0, len(imgs), 10):
-            new_imgs.append(imgs[i])
+        img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
 
         # Create GIF
         img.save(fp=filepath_out,
             format="GIF",
-            append_images=new_imgs,
+            append_images=imgs,
             save_all=True,
             duration=200,
             loop=0,
