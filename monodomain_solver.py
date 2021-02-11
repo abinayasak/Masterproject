@@ -2,8 +2,6 @@ from fenics import *
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
-#import cbcbeat
-#from IPython import display
 
 
 def solver(T, N, dt, tn, Nx, Ny, degree, u0, theta):
