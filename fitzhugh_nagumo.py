@@ -20,8 +20,9 @@ def solver(T, N, dt, tn, Nx, Ny, degree, u0, w0, theta):
     def fitzhugh_nagumo(v, t):
         a = 0.13; b = 0.013
         c1 = 0.26; c2 = 0.1; c3 = 1.0
-        i_app = 0.5
+        i_app = 10
 
+        """
         v_rest = -85
         v_peak = 40
         v_th = -68.75
@@ -34,12 +35,15 @@ def solver(T, N, dt, tn, Nx, Ny, degree, u0, w0, theta):
 
         dVdt = c1*(V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp*v_amp) - c2*(V - v_rest)*W/v_amp
         dWdt = b*(V - v_rest - c3*v[1])
+        """
+        dVdt = c1*v[0]*(v[0] - a)*(1 - v[0]) - c2*v[1] + i_app
+        dWdt = b*(v[0] - c3*v[1])
 
-        #dVdt = c1*v[0]*(v[0] - a)*(1 - v[0]) - c2*v[1]
-        #dWdt = b*(v[0] - c3*v[1])
+        #if t >= 50 and t <= 60 :
+        #    dVdt += i_app
 
-        if t >= 50 and t <= 60 :
-            dVdt += I_app
+        #dVdt = (dVdt - v_rest)/v_amp
+        #dWdt = dWdt/v_amp
 
         return dVdt, dWdt
 
@@ -61,6 +65,7 @@ def solver(T, N, dt, tn, Nx, Ny, degree, u0, w0, theta):
         np.save("x0", u0)
         u0[u0 < 0.2] = 0.0  # if x < 0.2, set u0 = 0.
         u0[u0 >= 0.2] = -85.0  # if x >= 0.2, set u0 = -85.
+        w0 = np.zeros(len(u0))
 
         t = np.linspace(tn, tn + theta * dt, N)
 
@@ -120,19 +125,19 @@ def solver(T, N, dt, tn, Nx, Ny, degree, u0, w0, theta):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 100
-    Nx = 100
-    Ny = 8
-    T = 500.0  # [s]
+    N = 200
+    Nx = 200
+    Ny = None
+    T = 400.0  # [s]
     dt = T / N  # [s]
     degree = 1
     u0 = None
-    w0 = np.linspace(0, 1, Nx+1)
+    w0 = None
 
 
     tn = 0
     count = 0
-    skip_frames = 99
+    skip_frames = 10
 
     t = np.arange(0, T+dt, dt)
 
@@ -149,9 +154,9 @@ def run_solver(make_gif):
             plt.clf()
             plt.plot(t, u, label="v")
             plt.plot(t, w, label="w")
-            #plt.axis([-0.5, T+0.5, -1, 1])
+            plt.axis([-5, T+5, -100, 40])
             plt.title("i=%d" % i)
-
+            plt.legend()
             plt.savefig(f"plots/u{i:04d}.png")
             count += skip_frames
 
