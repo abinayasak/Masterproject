@@ -35,7 +35,7 @@ def fitzhugh_nagumo(v, t):
 
     #print(t)
     if t >= 50 and t <= 60 :
-        #print("actication true")
+        #print("I_app added")
         dVdt += I_app
 
     return dVdt, dWdt
