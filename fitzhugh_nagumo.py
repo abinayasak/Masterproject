@@ -35,12 +35,15 @@ def fitzhugh_nagumo_reparameterized(v, t):
     v_th = v_rest + a*v_amp
 
     V = v_amp*v[0] + v_rest
+
     W = v_amp*v[1]
     I_app = v_amp * i_app
 
-    dVdt = c1 * (V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp**2) - c2*(V - v_rest)*W/v_amp + I_app
+    #dVdt = c1*(V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp**2) - c2*v[0]*v[1]
+    #dWdt = b*(V - v_rest - c3*v[1])
 
-    dWdt = b*(V - v_rest - c3*v[1])
+    dVdt = (c1/v_amp**2)*(v_amp*v[1])*(v_amp*v[0] + v_rest + v_th)*(v_peak - v_amp*v[0] + v_rest) - c2*v[0]*v_amp*v[1]
+    dWdt = b*(v_amp*v[0] - c3*v[1])
 
     if t >= 50 and t <= 60:
         dVdt += I_app
@@ -70,6 +73,8 @@ def set_initial_condition(V, mesh):
 
 
 def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
+    u = TrialFunction(V)
+    v = TestFunction(V)
 
     v_values = np.zeros(Nx + 1)
     w_values = np.zeros(Nx + 1)
@@ -79,7 +84,49 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     for i in range(Nx + 1):
         v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
 
-    return v_values, w_values
+
+    u_n = Function(V)
+    u_n.vector()[:] = v_values # u from step 1, inital value for step 2
+
+    # Step two
+    M_i = 1
+    lmda = 0.004  # M_e = lmda * M_i
+    gamma = float(dt * lmda / (1 + lmda))
+    if theta == 1:
+        F = (
+            u * v * dx
+            + theta * (gamma * dot(M_i * grad(u), grad(v)) * dx)
+            - u_n * v * dx
+        )
+    else:
+        F = (
+            u * v * dx
+            + theta * (gamma * dot(M_i * grad(u), grad(v)) * dx)
+            - u_n * v * dx
+            + (1 - theta) * (gamma * dot(M_i * grad(u_n), grad(v))) * dx
+        )
+
+    a, L = lhs(F), rhs(F)
+
+    u = Function(V)  # u from step 2, inital value for step 3
+    solve(a == L, u)
+
+    # Step three
+    if theta == 0.5:
+        new_v_values= np.zeros(Nx + 1)
+        new_w_values = np.zeros(Nx + 1)
+
+        u_n = u.vector()[:]
+        t = np.array([tn + theta * dt, tn + dt])
+        for i in range(Nx + 1):
+            new_v_values[i], new_w_values[i] = odeint(derivative, [u_n[i], w_values[i]], t)[-1]
+
+        u_new = Function(V)
+        u_new.vector()[:] = new_v_values
+        u = u_new
+
+
+    return u, w_values
 
 
 def run_solver(make_gif):
@@ -100,9 +147,6 @@ def run_solver(make_gif):
     mesh = UnitIntervalMesh(Nx)
     V = FunctionSpace(mesh, "P", degree)
 
-    v_list = []
-    w_list = []
-
     u0, w0 = set_initial_condition(V, mesh)
 
     derivative = fitzhugh_nagumo
@@ -111,24 +155,18 @@ def run_solver(make_gif):
         print("tn: %0.4f / %0.4f" % (tn, T))
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
-        u0 = u
+        u0 = u.vector()[:]
         w0 = w
-
-        v_list.append(u[0])
-        w_list.append(w[0])
 
         if make_gif:
             if i == count:
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
-                plt.plot(t, u)
-                plt.axis([0, 400, -0.5, 1.5])
+                plt.plot(t, u.vector()[:])
+                plt.axis([0, 400, -0.75, 1])
                 plt.title("i=%d" % i)
                 plt.savefig(f"plots/u{i:04d}.png")
                 count += skip_frames
-
-    np.save("v", v_list)
-    np.save("w", w_list)
 
     if make_gif:
 
@@ -156,4 +194,4 @@ def run_solver(make_gif):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=False)
+    run_solver(make_gif=True)
