@@ -114,8 +114,8 @@ def run_solver(make_gif):
         u0 = u
         w0 = w
 
-        v_list.append(u)
-        w_list.append(w)
+        v_list.append(u[0])
+        w_list.append(w[0])
 
         if make_gif:
             if i == count:
