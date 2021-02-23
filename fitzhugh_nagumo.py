@@ -48,7 +48,7 @@ def fitzhugh_nagumo_reparameterized(v, t):
     return dVdt, dWdt
 
 
-def set_initial_condition(Nx, V, mesh, tn, theta, dt):
+def set_initial_condition(V, mesh):
     u0 = []
     element = V.element()
     for cell in cells(mesh):
@@ -77,8 +77,7 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     t = np.array([tn, tn + theta * dt])
 
     for i in range(Nx + 1):
-        v_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1][0]
-        w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1][-1]
+        v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
 
     return v_values, w_values
 
@@ -101,7 +100,10 @@ def run_solver(make_gif):
     mesh = UnitIntervalMesh(Nx)
     V = FunctionSpace(mesh, "P", degree)
 
-    u0, w0 = set_initial_condition(Nx, V, mesh, tn, theta, dt)
+    v_list = []
+    w_list = []
+
+    u0, w0 = set_initial_condition(V, mesh)
 
     derivative = fitzhugh_nagumo
 
@@ -112,16 +114,21 @@ def run_solver(make_gif):
         u0 = u
         w0 = w
 
+        v_list.append(u)
+        w_list.append(w)
 
-        if i == count:
-            # Create and save every skip_frames'th plots to file
-            plt.clf()
-            plt.plot(t, u)
-            plt.axis([0, 400, -0.5, 1.5])
-            plt.title("i=%d" % i)
-            plt.savefig(f"plots/u{i:04d}.png")
-            count += skip_frames
+        if make_gif:
+            if i == count:
+                # Create and save every skip_frames'th plots to file
+                plt.clf()
+                plt.plot(t, u)
+                plt.axis([0, 400, -0.5, 1.5])
+                plt.title("i=%d" % i)
+                plt.savefig(f"plots/u{i:04d}.png")
+                count += skip_frames
 
+    np.save("v", v_list)
+    np.save("w", w_list)
 
     if make_gif:
 
@@ -130,7 +137,7 @@ def run_solver(make_gif):
         import os
 
         filepath_in = "plots/u*.png"
-        filepath_out = "fitzhugh_nagumo1_animation.gif"
+        filepath_out = "fitzhugh_nagumo_animation.gif"
 
         # Collecting the plots and putting them in a list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
@@ -149,4 +156,4 @@ def run_solver(make_gif):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True)
+    run_solver(make_gif=False)
