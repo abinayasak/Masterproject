@@ -24,6 +24,29 @@ def fitzhugh_nagumo(v, t):
 
     return dvdt, dwdt
 
+def fitzhugh_nagumo_reparameterized(v, t):
+    a = 0.13; b = 0.013
+    c1 = 0.26; c2 = 0.1; c3 = 1.0
+    i_app = 0.05
+
+    v_rest = -85.
+    v_peak = 40.
+    v_amp = v_peak - v_rest
+    v_th = v_rest + a*v_amp
+
+    V = v_amp*v[0] + v_rest
+    W = v_amp*v[1]
+    I_app = v_amp * i_app
+
+    dVdt = c1 * (V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp**2) - c2*(V - v_rest)*W/v_amp + I_app
+
+    dWdt = b*(V - v_rest - c3*v[1])
+
+    if t >= 50 and t <= 60:
+        dVdt += I_app
+
+    return dVdt, dWdt
+
 
 def set_initial_condition(Nx, V, mesh, tn, theta, dt):
     u0 = []
@@ -47,8 +70,6 @@ def set_initial_condition(Nx, V, mesh, tn, theta, dt):
 
 
 def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
-    u = TrialFunction(V)
-    v = TestFunction(V)
 
     v_values = np.zeros(Nx + 1)
     w_values = np.zeros(Nx + 1)
@@ -85,7 +106,7 @@ def run_solver(make_gif):
     derivative = fitzhugh_nagumo
 
     for i in range(N + 1):
-        print("tn: %0.4f / %0.4f   %s" % (tn, T, "fitzhugh_nagumo"))
+        print("tn: %0.4f / %0.4f" % (tn, T))
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
         u0 = u
@@ -109,7 +130,7 @@ def run_solver(make_gif):
         import os
 
         filepath_in = "plots/u*.png"
-        filepath_out = "animation.gif"
+        filepath_out = "fitzhugh_nagumo1_animation.gif"
 
         # Collecting the plots and putting them in a list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
