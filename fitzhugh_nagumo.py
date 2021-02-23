@@ -39,8 +39,9 @@ def fitzhugh_nagumo_reparameterized(v, t):
     W = v_amp*v[1]
     I_app = v_amp * i_app
 
-    dVdt = c1*(V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp**2) - c2*v[0]*v[1]
+    dVdt = c1*(V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp**2) - (c2*(V - v_rest)*v[1])/v_amp
     dWdt = b*(V - v_rest - c3*v[1])
+
 
     if t >= 50 and t <= 60:
         dVdt += I_app
@@ -81,7 +82,7 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     for i in range(Nx + 1):
         v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
 
-
+    """
     u_n = Function(V)
     u_n.vector()[:] = v_values # u from step 1, inital value for step 2
 
@@ -121,9 +122,10 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
         u_new = Function(V)
         u_new.vector()[:] = new_v_values
         u = u_new
+    """
 
-
-    return u, w_values
+    #return u, w_values
+    return v_values, w_values
 
 
 def run_solver(make_gif):
@@ -146,24 +148,35 @@ def run_solver(make_gif):
 
     u0, w0 = set_initial_condition(V, mesh)
 
-    derivative = fitzhugh_nagumo
+    derivative = fitzhugh_nagumo_reparameterized
+
+    v_list = []
+    w_list = []
 
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
-        u0 = u.vector()[:]
+        #u0 = u.vector()[:]
+        u0 = u
         w0 = w
+
+        v_list.append(u)
+        w_list.append(w)
 
         if make_gif:
             if i == count:
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
-                plt.plot(t, u.vector()[:])
+                #plt.plot(t, u.vector()[:])
+                plt.plot(t, u)
                 plt.axis([0, 400, -0.75, 1])
                 plt.title("i=%d" % i)
                 plt.savefig(f"plots/u{i:04d}.png")
                 count += skip_frames
+
+    np.save("v", v_list)
+    np.save("w", w_list)
 
     if make_gif:
 
@@ -172,7 +185,7 @@ def run_solver(make_gif):
         import os
 
         filepath_in = "plots/u*.png"
-        filepath_out = "fitzhugh_nagumo_animation.gif"
+        filepath_out = "fitzhugh_nagumo_reparameterized_animation.gif"
 
         # Collecting the plots and putting them in a list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
@@ -191,4 +204,4 @@ def run_solver(make_gif):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True)
+    run_solver(make_gif=False)
