@@ -158,7 +158,7 @@ def run_solver(make_gif):
         u0 = u
         w0 = w
 
-        v_list.append(u)
+        v_list.append(u[-1])
         w_list.append(w)
 
         if make_gif:
