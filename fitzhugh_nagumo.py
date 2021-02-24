@@ -34,13 +34,10 @@ def fitzhugh_nagumo_reparameterized(v, t):
     v_amp = v_peak - v_rest
     v_th = v_rest + a*v_amp
 
-    V = v_amp*v[0] + v_rest
-
-    W = v_amp*v[1]
     I_app = v_amp * i_app
 
-    dVdt = c1*(V - v_rest)*(V - v_th)*(v_peak - V)/(v_amp**2) - (c2*(V - v_rest)*v[1])/v_amp
-    dWdt = b*(V - v_rest - c3*v[1])
+    dVdt = c1*(v[0] - v_rest)*(v[0] - v_th)*(v_peak - v[0])/(v_amp**2) - (c2*(v[0] - v_rest)*v[1])/v_amp
+    dWdt = b*(v[0] - v_rest - c3*v[1])
 
 
     if t >= 50 and t <= 60:
