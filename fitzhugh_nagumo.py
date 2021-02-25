@@ -14,7 +14,7 @@ def dvdt(v, t):
 def fitzhugh_nagumo(v, t):
     a = 0.13; b = 0.013
     c1 = 0.26; c2 = 0.1; c3 = 1.0
-    i_app = 0.05
+    i_app = 0.
 
     dvdt = c1*v[0]*(v[0] - a)*(1 - v[0]) - c2*v[1]
     dwdt = b*(v[0] - c3*v[1])
@@ -27,7 +27,7 @@ def fitzhugh_nagumo(v, t):
 def fitzhugh_nagumo_reparameterized(v, t):
     a = 0.13; b = 0.013
     c1 = 0.26; c2 = 0.1; c3 = 1.0
-    i_app = 0.05
+    i_app = 0.
 
     v_rest = -85.
     v_peak = 40.
@@ -59,7 +59,7 @@ def set_initial_condition(V, mesh):
 
     u0 = np.array(sorted(u0))  # Sorting the x coordinates as well as making u0 an array
     np.save("x0", u0)
-    u0[u0 < 0.2] = 0.0  # if x < 0.2, set u0 = 0.
+    u0[u0 < 0.2] = -0.0  # if x < 0.2, set u0 = 0.
     u0[u0 >= 0.2] = -85.0  # if x >= 0.2, set u0 = -85.
 
     w0 = np.zeros(len(u0))
@@ -79,7 +79,7 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     for i in range(Nx + 1):
         v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
 
-    """
+
     u_n = Function(V)
     u_n.vector()[:] = v_values # u from step 1, inital value for step 2
 
@@ -119,17 +119,17 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
         u_new = Function(V)
         u_new.vector()[:] = new_v_values
         u = u_new
-    """
 
-    #return u, w_values
-    return v_values, w_values
+
+    return u, w_values
+    #return v_values, w_values
 
 
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 200
-    Nx = 200
+    N = 400
+    Nx = 400
     Ny = None
     T = 400.0  # [s]
     dt = T / N  # [s]
@@ -145,35 +145,35 @@ def run_solver(make_gif):
 
     u0, w0 = set_initial_condition(V, mesh)
 
-    derivative = fitzhugh_nagumo_reparameterized
+    derivative = fitzhugh_nagumo
 
-    v_list = []
-    w_list = []
 
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
-        #u0 = u.vector()[:]
-        u0 = u
+        u0 = u.vector()[:]
+        #u0 = u
         w0 = w
 
-        v_list.append(u[-1])
-        w_list.append(w)
 
         if make_gif:
             if i == count:
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
-                #plt.plot(t, u.vector()[:])
-                plt.plot(t, u)
-                plt.axis([0, 400, -0.75, 1])
+                plt.plot(t, u.vector()[:], label="v")
+                #plt.plot(t, u, label="v")
+                plt.plot(t, w, label="w")
+                plt.axis([0, 400, -1.5, 1])
+                #plt.axis([0, 400, -100, 100])
+                plt.legend()
                 plt.title("i=%d" % i)
                 plt.savefig(f"plots/u{i:04d}.png")
+
                 count += skip_frames
 
-    np.save("v", v_list)
-    np.save("w", w_list)
+    #np.save("v", v_list)
+    #np.save("w", w_list)
 
     if make_gif:
 
@@ -182,7 +182,7 @@ def run_solver(make_gif):
         import os
 
         filepath_in = "plots/u*.png"
-        filepath_out = "fitzhugh_nagumo_reparameterized_animation.gif"
+        filepath_out = "fitzhugh_nagumo_animation.gif"
 
         # Collecting the plots and putting them in a list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
@@ -201,4 +201,4 @@ def run_solver(make_gif):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=False)
+    run_solver(make_gif=True)
