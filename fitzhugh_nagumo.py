@@ -67,25 +67,10 @@ def set_initial_condition(V, mesh):
     return u0, w0
 
 
-def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
-    u = TrialFunction(V)
-    v = TestFunction(V)
 
-    v_values = np.zeros(Nx + 1)
-    w_values = np.zeros(Nx + 1)
-
-    t = np.array([tn, tn + theta * dt])
-
-    for i in range(Nx + 1):
-        v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
-
-
-    u_n = Function(V)
-    u_n.vector()[:] = v_values # u from step 1, inital value for step 2
-
-    # Step two
-    M_i = 1
-    lmda = 0.004  # M_e = lmda * M_i
+def monodomain_model(V, theta, u, v, u_n, dt):
+    M_i = 1/50   # 1
+    lmda = 0.004  # 0.004 M_e = lmda * M_i
     gamma = float(dt * lmda / (1 + lmda))
     if theta == 1:
         F = (
@@ -105,6 +90,49 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
     u = Function(V)  # u from step 2, inital value for step 3
     solve(a == L, u)
+
+    return u
+
+def bidomain_model(V, theta, u, v, u_n, dt):
+
+    if theta == 1:
+        F = ( None
+
+        )
+    else:
+        F = ( None
+
+        )
+
+    a, L = lhs(F), rhs(F)
+
+    u = Function(V)  # u from step 2, inital value for step 3
+    solve(a == L, u)
+
+    return u
+
+
+
+def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
+    u = TrialFunction(V)
+    v = TestFunction(V)
+
+    # Step one
+    v_values = np.zeros(Nx + 1)
+    w_values = np.zeros(Nx + 1)
+
+    t = np.array([tn, tn + theta * dt])
+    for i in range(Nx + 1):
+        v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
+
+    u_n = Function(V)
+    u_n.vector()[:] = v_values
+
+
+    # Step two
+    u = monodomain_model(V, theta, u, v, u_n, dt)
+    #u = bidomain_model(V, theta, u, v, u_n, dt)
+
 
     # Step three
     if theta == 0.5:
@@ -128,8 +156,8 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 400
-    Nx = 400
+    N = 2000
+    Nx = 2000
     Ny = None
     T = 400.0  # [s]
     dt = T / N  # [s]
@@ -138,14 +166,14 @@ def run_solver(make_gif):
 
     tn = 0
     count = 0
-    skip_frames = 5
+    skip_frames = 20
 
     mesh = UnitIntervalMesh(Nx)
     V = FunctionSpace(mesh, "P", degree)
 
     u0, w0 = set_initial_condition(V, mesh)
 
-    derivative = fitzhugh_nagumo
+    derivative = fitzhugh_nagumo_reparameterized
 
 
     for i in range(N + 1):
@@ -164,16 +192,14 @@ def run_solver(make_gif):
                 plt.plot(t, u.vector()[:], label="v")
                 #plt.plot(t, u, label="v")
                 plt.plot(t, w, label="w")
-                plt.axis([0, 400, -1.5, 1])
-                #plt.axis([0, 400, -100, 100])
+                #plt.axis([0, 400, -1, 1])
+                plt.axis([0, 400, -100, 100])
                 plt.legend()
                 plt.title("i=%d" % i)
                 plt.savefig(f"plots/u{i:04d}.png")
 
                 count += skip_frames
 
-    #np.save("v", v_list)
-    #np.save("w", w_list)
 
     if make_gif:
 
@@ -182,7 +208,7 @@ def run_solver(make_gif):
         import os
 
         filepath_in = "plots/u*.png"
-        filepath_out = "fitzhugh_nagumo_animation.gif"
+        filepath_out = "fitzhugh_nagumo_reparameterized_animation.gif"
 
         # Collecting the plots and putting them in a list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
