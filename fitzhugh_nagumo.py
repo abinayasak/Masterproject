@@ -77,8 +77,9 @@ def monodomain_model(V, theta, u, v, u_n, dt):
     M_i = (sigma)/(C_m*chi)
 
     #M_i = 1/50   # 1
-    lmda = 0.004  # 0.004 M_e = lmda * M_i
-    gamma = float(dt * lmda / (1 + lmda))
+    #lmda = 0.004  # 0.004 M_e = lmda * M_i
+    #gamma = float(dt * lmda / (1 + lmda))
+    gamma = dt
     if theta == 1:
         F = (
             u * v * dx
@@ -143,17 +144,17 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 5000
-    Nx = 400
+    N = 500
+    Nx = 600
     Ny = None
-    T = 5000.0  # [ms]
+    T = 500.0  # [ms]
     dt = T / N  # [ms]
     degree = 1
     t = np.linspace(0, T, N+1)
 
     tn = 0
     count = 0
-    skip_frames = 50
+    skip_frames = 10
 
     mesh = IntervalMesh(Nx, 0, 20) #[mm]
     V = FunctionSpace(mesh, "P", degree)
