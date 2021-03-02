@@ -59,8 +59,8 @@ def set_initial_condition(V, mesh):
 
     u0 = np.array(sorted(u0))  # Sorting the x coordinates as well as making u0 an array
     np.save("x0", u0)
-    u0[u0 < 0.2] = -0.0  # if x < 0.2, set u0 = 0.
-    u0[u0 >= 0.2] = -85.0  # if x >= 0.2, set u0 = -85.
+    u0[u0 < 2] = -0.0  # if x < 0.2, set u0 = 0.
+    u0[u0 >= 2] = -85.0  # if x >= 0.2, set u0 = -85.
 
     w0 = np.zeros(len(u0))
 
@@ -69,7 +69,12 @@ def set_initial_condition(V, mesh):
 
 
 def monodomain_model(V, theta, u, v, u_n, dt):
-    M_i = 1/50   # 1
+    sigma = 140. # [mm^-1]
+    chi = 140. # [mm^-1]
+    C_m = 0.01 # [mu*F*mm−2]
+    M_i = (sigma)/(C_m*chi)
+
+    #M_i = 1/50   # 1
     lmda = 0.004  # 0.004 M_e = lmda * M_i
     gamma = float(dt * lmda / (1 + lmda))
     if theta == 1:
@@ -93,25 +98,6 @@ def monodomain_model(V, theta, u, v, u_n, dt):
 
     return u
 
-def bidomain_model(V, theta, u, v, u_n, dt):
-
-    if theta == 1:
-        F = ( None
-
-        )
-    else:
-        F = ( None
-
-        )
-
-    a, L = lhs(F), rhs(F)
-
-    u = Function(V)  # u from step 2, inital value for step 3
-    solve(a == L, u)
-
-    return u
-
-
 
 def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     u = TrialFunction(V)
@@ -131,7 +117,6 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
     # Step two
     u = monodomain_model(V, theta, u, v, u_n, dt)
-    #u = bidomain_model(V, theta, u, v, u_n, dt)
 
 
     # Step three
@@ -156,8 +141,8 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 2000
-    Nx = 2000
+    N = 800
+    Nx = 800
     Ny = None
     T = 400.0  # [s]
     dt = T / N  # [s]
@@ -168,7 +153,7 @@ def run_solver(make_gif):
     count = 0
     skip_frames = 20
 
-    mesh = UnitIntervalMesh(Nx)
+    mesh = IntervalMesh(Nx, 0, 20) #[mm]
     V = FunctionSpace(mesh, "P", degree)
 
     u0, w0 = set_initial_condition(V, mesh)
@@ -181,7 +166,6 @@ def run_solver(make_gif):
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
         u0 = u.vector()[:]
-        #u0 = u
         w0 = w
 
 
@@ -190,10 +174,10 @@ def run_solver(make_gif):
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
                 plt.plot(t, u.vector()[:], label="v")
-                #plt.plot(t, u, label="v")
                 plt.plot(t, w, label="w")
-                #plt.axis([0, 400, -1, 1])
                 plt.axis([0, 400, -100, 100])
+                plt.xlabel("t [ms]")
+                plt.ylabel("[mV]")
                 plt.legend()
                 plt.title("i=%d" % i)
                 plt.savefig(f"plots/u{i:04d}.png")
