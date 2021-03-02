@@ -72,7 +72,6 @@ def monodomain_model(V, theta, u, v, u_n, dt):
     sigma_e = 0.62
     sigma_i = 0.17
     sigma = sigma_i*sigma_e/(sigma_e+sigma_i)
-    #sigma = 140. # [mm^-1]
     chi = 140. # [mm^-1]
     C_m = 0.01 # [mu*F*mm−2]
     M_i = (sigma)/(C_m*chi)
@@ -144,17 +143,17 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 400
+    N = 5000
     Nx = 400
     Ny = None
-    T = 800.0  # [s]
-    dt = T / N  # [s]
+    T = 5000.0  # [ms]
+    dt = T / N  # [ms]
     degree = 1
     t = np.linspace(0, T, N+1)
 
     tn = 0
     count = 0
-    skip_frames = 20
+    skip_frames = 50
 
     mesh = IntervalMesh(Nx, 0, 20) #[mm]
     V = FunctionSpace(mesh, "P", degree)
@@ -176,10 +175,10 @@ def run_solver(make_gif):
             if i == count:
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
-                plt.plot(t, u.vector()[:], label="v")
-                plt.plot(t, w, label="w")
-                plt.axis([0, 400, -100, 100])
-                plt.xlabel("t [ms]")
+                plt.plot(np.load("x0.npy"), u.vector()[:], label="v")
+                plt.plot(np.load("x0.npy"), w, label="w")
+                plt.axis([0, 20, -100, 100])
+                plt.xlabel("x [mm]")
                 plt.ylabel("[mV]")
                 plt.legend()
                 plt.title("i=%d" % i)
