@@ -69,7 +69,10 @@ def set_initial_condition(V, mesh):
 
 
 def monodomain_model(V, theta, u, v, u_n, dt):
-    sigma = 140. # [mm^-1]
+    sigma_e = 0.62
+    sigma_i = 0.17
+    sigma = sigma_i*sigma_e/(sigma_e+sigma_i)
+    #sigma = 140. # [mm^-1]
     chi = 140. # [mm^-1]
     C_m = 0.01 # [mu*F*mm−2]
     M_i = (sigma)/(C_m*chi)
@@ -141,10 +144,10 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 800
-    Nx = 800
+    N = 400
+    Nx = 400
     Ny = None
-    T = 400.0  # [s]
+    T = 800.0  # [s]
     dt = T / N  # [s]
     degree = 1
     t = np.linspace(0, T, N+1)
