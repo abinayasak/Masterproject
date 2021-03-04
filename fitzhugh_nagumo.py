@@ -4,17 +4,17 @@ import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 
 def dvdt(v, t):
-    A = 0.04  # Constant
+    A = 0.04        # Constant
     v_rest = -85.0  # [mV]
-    v_th = -65.0  # [mV]
-    v_peak = 40.0  # [mV]
+    v_th = -65.0    # [mV]
+    v_peak = 40.0   # [mV]
     return -A * A * (v - v_rest) * (v - v_th) * (v - v_peak)
 
 
 def fitzhugh_nagumo(v, t):
-    a = 0.13; b = 0.013
-    c1 = 0.26; c2 = 0.1; c3 = 1.0
-    i_app = 0.
+    a = 0.13; b = 0.013            # Constant
+    c1 = 0.26; c2 = 0.1; c3 = 1.0  # Constant
+    i_app = 0.                     # Constant
 
     dvdt = c1*v[0]*(v[0] - a)*(1 - v[0]) - c2*v[1]
     dwdt = b*(v[0] - c3*v[1])
@@ -25,16 +25,15 @@ def fitzhugh_nagumo(v, t):
     return dvdt, dwdt
 
 def fitzhugh_nagumo_reparameterized(v, t):
-    a = 0.13; b = 0.013
-    c1 = 0.26; c2 = 0.1; c3 = 1.0
-    i_app = 0.
+    a = 0.13; b = 0.013            # Constant
+    c1 = 0.26; c2 = 0.1; c3 = 1.0  # Constant
+    i_app = 0.                     # Constant
 
-    v_rest = -85.
-    v_peak = 40.
-    v_amp = v_peak - v_rest
-    v_th = v_rest + a*v_amp
-
-    I_app = v_amp * i_app
+    v_rest = -85.            # [mV]
+    v_peak = 40.             # [mV]
+    v_amp = v_peak - v_rest  # [mV]
+    v_th = v_rest + a*v_amp  # [mV]
+    I_app = v_amp * i_app    # [mV]
 
     dVdt = c1*(v[0] - v_rest)*(v[0] - v_th)*(v_peak - v[0])/(v_amp**2) - (c2*(v[0] - v_rest)*v[1])/v_amp
     dWdt = b*(v[0] - v_rest - c3*v[1])
@@ -47,6 +46,7 @@ def fitzhugh_nagumo_reparameterized(v, t):
 
 
 def set_initial_condition(V, mesh):
+
     u0 = []
     element = V.element()
     for cell in cells(mesh):
@@ -59,39 +59,35 @@ def set_initial_condition(V, mesh):
 
     u0 = np.array(sorted(u0))  # Sorting the x coordinates as well as making u0 an array
     np.save("x0", u0)
-    u0[u0 < 2] = -0.0  # if x < 0.2, set u0 = 0.
-    u0[u0 >= 2] = -85.0  # if x >= 0.2, set u0 = -85.
+    #u0[u0 < 2] = 0.  # if x < 2 mm, set u0 = 0.
+    #u0[u0 >= 2] = -85.  # if x >= 2 mm, set u0 = -85.
 
-    w0 = np.zeros(len(u0))
+    #w0 = np.zeros(len(u0))
 
-    return u0, w0
+    #return u0, w0
 
 
 
 def monodomain_model(V, theta, u, v, u_n, dt):
-    sigma_e = 0.62
-    sigma_i = 0.17
-    sigma = sigma_i*sigma_e/(sigma_e+sigma_i)
-    chi = 140. # [mm^-1]
-    C_m = 0.01 # [mu*F*mm−2]
+    sigma_e = 0.62                             # [Sm^-1]
+    sigma_i = 0.17                             # [Sm^-1]
+    sigma = sigma_i*sigma_e/(sigma_e+sigma_i)  # [Sm^-1]
+    chi = 140.                                 # [mm^-1]
+    C_m = 0.01                                 # [mu*F*mm−2]
     M_i = (sigma)/(C_m*chi)
 
-    #M_i = 1/50   # 1
-    #lmda = 0.004  # 0.004 M_e = lmda * M_i
-    #gamma = float(dt * lmda / (1 + lmda))
-    gamma = dt
     if theta == 1:
         F = (
             u * v * dx
-            + theta * (gamma * dot(M_i * grad(u), grad(v)) * dx)
+            + theta * (dt * dot(M_i * grad(u), grad(v)) * dx)
             - u_n * v * dx
         )
     else:
         F = (
             u * v * dx
-            + theta * (gamma * dot(M_i * grad(u), grad(v)) * dx)
+            + theta * (dt * dot(M_i * grad(u), grad(v)) * dx)
             - u_n * v * dx
-            + (1 - theta) * (gamma * dot(M_i * grad(u_n), grad(v))) * dx
+            + (1 - theta) * (dt * dot(M_i * grad(u_n), grad(v))) * dx
         )
 
     a, L = lhs(F), rhs(F)
@@ -144,33 +140,35 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
-    N = 500
-    Nx = 600
-    Ny = None
-    T = 500.0  # [ms]
-    dt = T / N  # [ms]
     degree = 1
-    t = np.linspace(0, T, N+1)
+    N = 200
+    Nx = 200
+    Ny = None
+    T = 200.0                       # [ms]
+    dt = T / N                      # [ms]
+    t = np.linspace(0, T, N+1)      # [ms]
+
+    mesh = IntervalMesh(Nx, 0, 20)  # [mm]
+    V = FunctionSpace(mesh, "P", degree)
+    u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+    u_n = interpolate(u0, V)
+
+    u0 = u_n.vector()[:]
+    u0 = u0[::-1]
+    w0 = np.zeros(len(u0))
+
+
+    derivative = fitzhugh_nagumo_reparameterized
 
     tn = 0
     count = 0
     skip_frames = 10
-
-    mesh = IntervalMesh(Nx, 0, 20) #[mm]
-    V = FunctionSpace(mesh, "P", degree)
-
-    u0, w0 = set_initial_condition(V, mesh)
-
-    derivative = fitzhugh_nagumo_reparameterized
-
-
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
         u0 = u.vector()[:]
         w0 = w
-
 
         if make_gif:
             if i == count:
@@ -179,7 +177,7 @@ def run_solver(make_gif):
                 plt.plot(np.load("x0.npy"), u.vector()[:], label="v")
                 plt.plot(np.load("x0.npy"), w, label="w")
                 plt.axis([0, 20, -100, 100])
-                plt.xlabel("x [mm]")
+                plt.xlabel("[mm]")
                 plt.ylabel("[mV]")
                 plt.legend()
                 plt.title("i=%d" % i)
@@ -190,14 +188,13 @@ def run_solver(make_gif):
 
     if make_gif:
 
-        import glob
+        import glob; import os
         from PIL import Image
-        import os
 
         filepath_in = "plots/u*.png"
         filepath_out = "fitzhugh_nagumo_reparameterized_animation.gif"
 
-        # Collecting the plots and putting them in a list
+        # Collecting the plots and putting them in a ordered list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
 
         # Create GIF
@@ -209,7 +206,7 @@ def run_solver(make_gif):
             loop=0,
         )
 
-        # Delete all plots in faile after creating the GIF
+        # Delete all plots in file after creating the GIF
         [os.remove(f) for f in sorted(glob.glob(filepath_in))]
 
 
