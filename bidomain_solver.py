@@ -30,7 +30,6 @@ def set_initial_condition(V, mesh):
         for i in range(int(element.tabulate_dof_coordinates(cell).size / 2)):
             coordinates.append((element.tabulate_dof_coordinates(cell)[i]).tolist())
 
-
     coord = []
     x0 = []
     y0 = []
@@ -40,8 +39,8 @@ def set_initial_condition(V, mesh):
             x0.append(i[0])
             y0.append(i[1])
 
-    print(x0)
-    print(y0)
+    #print(x0)
+    #print(y0)
 
     x0 = np.array(sorted(x0))  # Sorting the x coordinates
     y0 = np.array(sorted(y0))  # Sorting the y coordinates
@@ -50,8 +49,6 @@ def set_initial_condition(V, mesh):
     u0[u0 < 0.2] = -0.0  # if x < 0.2, set u0 = 0.
     u0[u0 >= 0.2] = -85.0  # if x >= 0.2, set u0 = -85.
 
-    u_e = u0
-    
     w0 = np.zeros(len(u0))
 
     return u0, w0
@@ -90,17 +87,23 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     v_1, v_2 = TestFunctions(V)
 
     u = Function(V)
-    u_1, u_2 = u.split(deepcopy=True)
+    u_n = Function(V)
 
+    u_1, u_2 = split(u)
+    u_n1, u_n2 = split(u_n)
+
+
+    #u_1, u_2 = u.split(deepcopy=True)
     # Step one
-    v_values = np.zeros(Nx + 1)
-    w_values = np.zeros(Nx + 1)
+    v_values = np.zeros(u.vector()[:].size)
+    w_values = np.zeros(u.vector()[:].size)
 
     t = np.array([tn, tn + theta * dt])
     for i in range(Nx + 1):
         v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
 
     print(v_values.size)
+    print(v_values)
     u_n = Function(V)
     print(u_n.vector()[:].size)
     u_n1, u_n2 = u_n.split(deepcopy=True)
@@ -108,7 +111,7 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
 
     # Step two
-    #u = bidomain_model(V, theta, u_1, u_2, v_1, v_2, u_n1, u_n2, dt)
+    u = bidomain_model(V, theta, u_1, u_2, v_1, v_2, u_n1, u_n2, dt)
 
 
     # Step three
@@ -134,25 +137,33 @@ def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
-    N = 10
-    Nx = 2
-    Ny = 2
-    T = 500.0                       # [ms]
+    N = 100
+    Nx = 10
+    Ny = 10
+    T = 100.0                       # [ms]
     dt = T / N                      # [ms]
     t = np.linspace(0, T, N+1)      # [ms]
     #mesh = RectangleMesh(Point(0, 0), Point(20, 7), Nx, Ny)
     mesh = UnitSquareMesh(Nx, Ny)
-    #V = FunctionSpace(mesh, "P", degree)
-
     P1 = FiniteElement('P', triangle, degree)
     element = MixedElement([P1, P1])
     V = FunctionSpace(mesh, element)
 
-    plot(mesh)
-    plt.savefig("mesh.png")
+    u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+    u_n = interpolate(u0, V)
 
-    u0, w0 = set_initial_condition(V, mesh)
-    derivative = fitzhugh_nagumo_reparameterized
+
+    #print(u_n.vector()[:])
+    #u0 = u_n.vector()[:]
+
+    #print(u0)
+    #u0 = u0[::-1]
+    #w0 = np.zeros(len(u0))
+
+    #u0, w0 = set_initial_condition(V, mesh)
+    #derivative = fitzhugh_nagumo_reparameterized
+
+
 
     """
     tn = 0
