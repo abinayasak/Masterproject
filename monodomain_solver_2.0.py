@@ -101,26 +101,28 @@ def run_solver(make_gif, dimension):
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
     N = 200
-    Nx = 20
-    Ny = 20
+    Nx = 50
+    Ny = 50
     T = 500.0                       # [ms]
     dt = T / N                      # [ms]
     t = np.linspace(0, T, N+1)      # [ms]
 
     if dimension == "1D":
         mesh = IntervalMesh(Nx, 0, 20)
+        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
+        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        #u0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
+
     V = FunctionSpace(mesh, "P", degree)
-    u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
-    u_n = interpolate(u0, V)
+    u0 = interpolate(u0, V)
 
     x0 = Expression('x[0]', degree=0)
     x0 = interpolate(x0, V)
     np.save("x0", x0.vector()[:])
 
-    u0 = sorted(u_n.vector()[:])
-    u0 = u0[::-1]
+    u0 = u0.vector()[:]
     w0 = np.zeros(len(u0))
 
     #set_initial_condition(V, mesh)
@@ -141,8 +143,8 @@ def run_solver(make_gif, dimension):
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
                 if dimension == "1D":
-                    plt.plot(x0.vector()[:], u.vector()[:][::-1], label="v")
-                    plt.plot(x0.vector()[:], w[::-1], label="w")
+                    plt.plot(x0.vector()[:], u.vector()[:], label="v")
+                    plt.plot(x0.vector()[:], w, label="w")
                     plt.axis([0, 20, -100, 100])
                     plt.legend()
                     plt.xlabel("[mm]")
