@@ -24,7 +24,7 @@ def fitzhugh_nagumo_reparameterized(v, t):
     return dVdt, dWdt
 
 
-def bidomain_model(V, u_n, dt):
+def bidomain_model(V, theta, u_n, dt):
     sigma_e = 0.62                             # [Sm^-1]
     sigma_i = 0.17                             # [Sm^-1]
     sigma = sigma_i*sigma_e/(sigma_e+sigma_i)  # [Sm^-1]
@@ -43,12 +43,22 @@ def bidomain_model(V, u_n, dt):
 
     u_n1 = u_n
 
-    F = (
-        u_1 * v_1 * dx
-        + dt * (dot(M_i * grad(u_2), grad(v_2)) * dx)
-        + dt * (dot(M_e * grad(u_2), grad(v_2)) * dx)
-        - (u_n1 * v_1 * dx)
-    )
+    if theta == 1:
+        F = (
+            u_1 * v_1 * dx
+            + 2 * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_2), grad(v_2)) * dx)
+            + dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
+            - (u_n1 * v_1 * dx)
+        )
+    else:
+        F = (
+            u_1 * v_1 * dx
+            + dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_2), grad(v_2)) * dx)
+            + dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
+            - (u_n1 * v_1 * dx)
+        )
 
     a, L = lhs(F), rhs(F)
 
@@ -75,7 +85,7 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
 
     # Step two
-    u = bidomain_model(V, u_n, dt)
+    u = bidomain_model(V, theta, u_n, dt)
 
 
     # Step three
@@ -110,10 +120,11 @@ def run_solver(make_gif, dimension):
 
     if dimension == "1D":
         mesh = IntervalMesh(Nx, 0, 20)
-        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0) #(condition) ? (if_true) : if_false)
+        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-        u0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
+        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        #u0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
 
     V = FunctionSpace(mesh, "P", degree)
     u0 = interpolate(u0, V)
@@ -143,8 +154,8 @@ def run_solver(make_gif, dimension):
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
                 if dimension == "1D":
-                    plt.plot(x0.vector()[:], u.vector()[:][::-1], label="v")
-                    plt.plot(x0.vector()[:], w[::-1], label="w")
+                    plt.plot(x0.vector()[:], u.vector()[:], label="v")
+                    plt.plot(x0.vector()[:], w, label="w")
                     plt.axis([0, 20, -100, 100])
                     plt.legend()
                     plt.xlabel("[mm]")
