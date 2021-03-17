@@ -27,13 +27,10 @@ def fitzhugh_nagumo_reparameterized(v, t):
 def bidomain_model(V, theta, u_n, dt):
     sigma_e = 0.62                             # [Sm^-1]
     sigma_i = 0.17                             # [Sm^-1]
-    sigma = sigma_i*sigma_e/(sigma_e+sigma_i)  # [Sm^-1]
     chi = 140.                                 # [mm^-1]
     C_m = 0.01                                 # [mu*F*mm−2]
-    M_i = (sigma)/(C_m*chi)
-
-    lmda = 0.004
-    M_e = lmda * M_i
+    M_i = (sigma_i)/(C_m*chi)
+    M_e = (sigma_e)/(C_m*chi)
 
     u_1 = TrialFunction(V)
     v_1 = TestFunction(V)
@@ -90,12 +87,12 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
     # Step three
     if theta == 0.5:
-        new_v_values= np.zeros(Nx + 1)
-        new_w_values = np.zeros(Nx + 1)
+        new_v_values= np.zeros(len(u0))
+        new_w_values = np.zeros(len(u0))
 
         u_n = u.vector()[:]
         t = np.array([tn + theta * dt, tn + dt])
-        for i in range(Nx + 1):
+        for i in range(len(u0)):
             new_v_values[i], new_w_values[i] = odeint(derivative, [u_n[i], w_values[i]], t)[-1]
 
         u_new = Function(V)
@@ -109,7 +106,7 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
 def run_solver(make_gif, dimension):
 
-    theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
+    theta = 0.5  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
     N = 200
     Nx = 20
@@ -123,8 +120,8 @@ def run_solver(make_gif, dimension):
         u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
-        #u0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
+        #u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        u0 = Expression('(x[0] <= 2 && x[1] <= 2) ? 0 : -85', degree=0)
 
     V = FunctionSpace(mesh, "P", degree)
     u0 = interpolate(u0, V)
