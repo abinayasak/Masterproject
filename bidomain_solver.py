@@ -43,18 +43,22 @@ def bidomain_model(V, theta, u_n, dt):
     if theta == 1:
         F = (
             u_1 * v_1 * dx
-            + 2 * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_2), grad(v_2)) * dx)
+            + dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
             + dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
             - (u_n1 * v_1 * dx)
         )
     else:
         F = (
             u_1 * v_1 * dx
-            + dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_2), grad(v_2)) * dx)
-            + dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
+            + 0.5 * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
+            + 2 * dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
             - (u_n1 * v_1 * dx)
+            + 0.5 * dt * (dot(M_i * grad(u_n1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_n1), grad(v_2)) * dx)
         )
 
     a, L = lhs(F), rhs(F)
@@ -106,11 +110,11 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
 def run_solver(make_gif, dimension):
 
-    theta = 0.5  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
+    theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
     N = 200
-    Nx = 20
-    Ny = 20
+    Nx = 50
+    Ny = 50
     T = 500.0                       # [ms]
     dt = T / N                      # [ms]
     t = np.linspace(0, T, N+1)      # [ms]
@@ -120,8 +124,8 @@ def run_solver(make_gif, dimension):
         u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-        #u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
-        u0 = Expression('(x[0] <= 2 && x[1] <= 2) ? 0 : -85', degree=0)
+        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        #u0 = Expression('(x[0] <= 5 && x[1] <= 5) ? 0 : -85', degree=0)
 
     V = FunctionSpace(mesh, "P", degree)
     u0 = interpolate(u0, V)
@@ -129,7 +133,7 @@ def run_solver(make_gif, dimension):
 
     x0 = Expression('x[0]', degree=0)
     x0 = interpolate(x0, V)
-    np.save("x0", x0.vector()[:])
+    #np.save("x0", x0.vector()[:])
 
     u0 = u0.vector()[:]
     w0 = np.zeros(len(u0))
