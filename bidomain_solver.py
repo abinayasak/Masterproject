@@ -52,13 +52,13 @@ def bidomain_model(V, theta, u_n, dt):
     else:
         F = (
             u_1 * v_1 * dx
-            + 0.5 * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + theta * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
             + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
             + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
-            + 2 * dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
+            + (dt/theta) * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
             - (u_n1 * v_1 * dx)
-            + 0.5 * dt * (dot(M_i * grad(u_n1), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_n1), grad(v_2)) * dx)
+            + (1 - theta) * dt * (dot(M_i * grad(u_n1), grad(v_1)) * dx)
+            + dt * ((1 - theta)/theta) * (dot(M_i * grad(u_n1), grad(v_2)) * dx)
         )
 
     a, L = lhs(F), rhs(F)
@@ -199,4 +199,4 @@ def run_solver(make_gif, dimension):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True, dimension="2D")
+    run_solver(make_gif=True, dimension="1D")
