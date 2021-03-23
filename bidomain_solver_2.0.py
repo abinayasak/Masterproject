@@ -24,39 +24,52 @@ def fitzhugh_nagumo_reparameterized(v, t):
     return dVdt, dWdt
 
 
-def monodomain_model(V, theta, u, v, u_n, dt):
+def bidomain_model(VU, theta, u_n, dt):
     sigma_e = 0.62                             # [Sm^-1]
     sigma_i = 0.17                             # [Sm^-1]
-    sigma = sigma_i*sigma_e/(sigma_e+sigma_i)  # [Sm^-1]
     chi = 140.                                 # [mm^-1]
     C_m = 0.01                                 # [mu*F*mm−2]
-    M = (sigma)/(C_m*chi)
+    M_i = (sigma_i)/(C_m*chi)
+    M_e = (sigma_e)/(C_m*chi)
+
+    u_1, u_2 = TrialFunctions(VU)
+    v_1, v_2 = TestFunctions(VU)
+
+    u_n1 = u_n
 
     if theta == 1:
         F = (
-            u * v * dx
-            + theta * (dt * dot(M * grad(u), grad(v)) * dx)
-            - u_n * v * dx
+            u_1 * v_1 * dx
+            + dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
+            + dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
+            - (u_n1 * v_1 * dx)
         )
     else:
         F = (
-            u * v * dx
-            + theta * (dt * dot(M * grad(u), grad(v)) * dx)
-            - u_n * v * dx
-            + (1 - theta) * (dt * dot(M * grad(u_n), grad(v))) * dx
+            u_1 * v_1 * dx
+            + theta * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
+            + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
+            + (dt/theta) * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
+            - (u_n1 * v_1 * dx)
+            + (1 - theta) * dt * (dot(M_i * grad(u_n1), grad(v_1)) * dx)
+            + dt * ((1 - theta)/theta) * (dot(M_i * grad(u_n1), grad(v_2)) * dx)
         )
 
     a, L = lhs(F), rhs(F)
 
-    u = Function(V)  # u from step 2, inital value for step 3
-    solve(a == L, u)
+    vu = Function(VU)  # u from step 2, inital value for step 3
+    solve(a == L, vu)
+    v, u = vu.split(True)
 
-    return u
+
+    return v
 
 
-def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
-    u = TrialFunction(V)
-    v = TestFunction(V)
+def step(VU, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
+    V = VU.sub(0).collapse()
 
     u0 = np.array(u0)
     w0 = np.array(w0)
@@ -74,17 +87,17 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
 
     # Step two
-    u = monodomain_model(V, theta, u, v, u_n, dt)
+    u = bidomain_model(VU, theta, u_n, dt)
 
 
     # Step three
     if theta == 0.5:
-        new_v_values= np.zeros(Nx + 1)
-        new_w_values = np.zeros(Nx + 1)
+        new_v_values= np.zeros(len(u0))
+        new_w_values = np.zeros(len(u0))
 
         u_n = u.vector()[:]
         t = np.array([tn + theta * dt, tn + dt])
-        for i in range(Nx + 1):
+        for i in range(len(u0)):
             new_v_values[i], new_w_values[i] = odeint(derivative, [u_n[i], w_values[i]], t)[-1]
 
         u_new = Function(V)
@@ -94,14 +107,14 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
 
     return u, w_values
 
+
 def save_for_line_plot(u):
     tol = 0.001  # avoid hitting points outside the domain
     x = np.linspace(tol, 20 - tol, 101)
     points = [(x_, 10) for x_ in x]  # 2D points
     u_line = np.array([u(point) for point in points])
     #p_line = np.array([p(point) for point in points])
-    np.savetxt('mono.txt', u_line)
-
+    np.savetxt('bi.txt', u_line)
 
 
 def run_solver(make_gif, dimension):
@@ -124,10 +137,19 @@ def run_solver(make_gif, dimension):
         u0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
 
     V = FunctionSpace(mesh, "P", degree)
+
+    Ve = FiniteElement("CG", mesh.ufl_cell(), 1)
+    Ue = FiniteElement("CG", mesh.ufl_cell(), 1)
+
+    VU = FunctionSpace(mesh, MixedElement((Ve,Ue)))
+
+
     u0 = interpolate(u0, V)
+    #print(u0.vector()[:])
 
     x0 = Expression('x[0]', degree=0)
     x0 = interpolate(x0, V)
+    #np.save("x0", x0.vector()[:])
 
     u0 = u0.vector()[:]
     w0 = np.zeros(len(u0))
@@ -139,7 +161,7 @@ def run_solver(make_gif, dimension):
     skip_frames = 5
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
-        u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
+        u, w = step(VU, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
         tn += dt
         u0 = u.vector()[:]
         w0 = w
@@ -169,13 +191,14 @@ def run_solver(make_gif, dimension):
 
     save_for_line_plot(u)
 
+
     if make_gif:
 
         import glob; import os
         from PIL import Image
 
         filepath_in = "plots/u*.png"
-        filepath_out = "monodomain_%s.gif" % dimension
+        filepath_out = "bidomain_%s.gif" % dimension
 
         # Collecting the plots and putting them in a ordered list
         img, *imgs = [(Image.open(f)) for f in sorted(glob.glob(filepath_in))]
