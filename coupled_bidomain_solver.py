@@ -34,8 +34,8 @@ def bidomain_model(W, theta, v_n, dt):
     M_e = (sigma_e)/(C_m*chi)
     M_o = 0.25*M_e
 
-    v, u = TrialFunctions(W)
-    psi_v, psi_u = TestFunctions(W)
+    v, u_e = TrialFunctions(W)
+    psi_v, psi_ue = TestFunctions(W)
 
     dH = Measure("dx", domain=W.sub(0).mesh())
     dV = Measure("dx", domain=W.sub(1).mesh())
@@ -44,32 +44,32 @@ def bidomain_model(W, theta, v_n, dt):
         F = (
             v * psi_v * dH
             + dt * (dot(M_i * grad(v), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(u), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(v), grad(psi_u)) * dV)
-            + dt * (dot((M_i + M_e) * grad(u), grad(psi_u)) * dV)
-            + dt * (dot(M_o * grad(u), grad(psi_u)) * dV)
+            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dH)
+            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dV)
+            + dt * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV)
+            + dt * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
             - (v_n * psi_v * dH)
         )
     else:
         F = (
             v * psi_v * dH
             + theta * dt * (dot(M_i * grad(v), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(u), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(v), grad(psi_u)) * dV)
-            + (dt/theta) * (dot((M_i + M_e) * grad(u), grad(psi_u)) * dV)
-            + (dt/theta) * (dot(M_o * grad(u), grad(psi_u)) * dV)
+            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dH)
+            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dV)
+            + (dt/theta) * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV)
+            + (dt/theta) * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
             - (v_n * psi_v * dH)
             + (1 - theta) * dt * (dot(M_i * grad(v_n), grad(psi_v)) * dH)
-            + ((1 - theta)/theta) * (dot(M_i * grad(v_n), grad(psi_u)) * dV)
+            + ((1 - theta)/theta) * (dot(M_i * grad(v_n), grad(psi_ue)) * dV)
         )
 
     a, L = lhs(F), rhs(F)
 
     vu = Function(W)  # u from step 2, inital value for step 3
     solve(a == L, vu)
-    v, u = vu.split(True)
+    v, u_e = vu.split(True)
 
-    return v
+    return v, u_e
 
 
 def step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
@@ -91,7 +91,7 @@ def step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
 
 
     # Step two
-    v = bidomain_model(W, theta, v_n, dt)
+    v, u_e = bidomain_model(W, theta, v_n, dt)
 
 
     # Step three
@@ -109,7 +109,7 @@ def step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
         v = v_new
 
 
-    return v, w_values
+    return v, w_values, u_e
 
 
 def save_for_line_plot(v):
@@ -118,7 +118,7 @@ def save_for_line_plot(v):
     points = [(x_, 10) for x_ in x]  # 2D points
     v_line = np.array([v(point) for point in points])
     #p_line = np.array([p(point) for point in points])
-    np.savetxt('bi2.txt', v_line)
+    np.savetxt('bi_coupled_ue_T-2dt.txt', v_line)
 
 
 def run_solver(make_gif, dimension):
@@ -170,10 +170,14 @@ def run_solver(make_gif, dimension):
     skip_frames = 5
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
-        v, w = step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative)
+        v, w, u_e = step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative)
         tn += dt
         v0 = v.vector()[:]
         w0 = w
+
+        if tn == T - 2*dt:
+            print(tn)
+            save_for_line_plot(u_e)
 
         if make_gif:
             if i == count:
@@ -198,7 +202,7 @@ def run_solver(make_gif, dimension):
 
                 count += skip_frames
 
-    save_for_line_plot(v)
+    #save_for_line_plot(u_e)
 
 
     if make_gif:
@@ -226,4 +230,4 @@ def run_solver(make_gif, dimension):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True, dimension="2D")
+    run_solver(make_gif=False, dimension="2D")

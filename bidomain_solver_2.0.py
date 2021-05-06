@@ -24,88 +24,85 @@ def fitzhugh_nagumo_reparameterized(v, t):
     return dVdt, dWdt
 
 
-def bidomain_model(VU, theta, u_n, dt):
-    sigma_e = 0.62                             # [Sm^-1]
-    sigma_i = 0.17                             # [Sm^-1]
-    chi = 140.                                 # [mm^-1]
-    C_m = 0.01                                 # [mu*F*mm−2]
+def bidomain_model(VU, theta, v_n, dt):
+    sigma_e = 0.62                      # [Sm^-1]
+    sigma_i = 0.17                      # [Sm^-1]
+    chi = 140.                          # [mm^-1]
+    C_m = 0.01                          # [mu*F*mm−2]
     M_i = (sigma_i)/(C_m*chi)
     M_e = (sigma_e)/(C_m*chi)
 
-    u_1, u_2 = TrialFunctions(VU)
-    v_1, v_2 = TestFunctions(VU)
-
-    u_n1 = u_n
+    v, u_e = TrialFunctions(VU)
+    psi_v, psi_ue = TestFunctions(VU)
 
     if theta == 1:
         F = (
-            u_1 * v_1 * dx
-            + dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
-            + dt * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
-            - (u_n1 * v_1 * dx)
+            v * psi_v * dx
+            + dt * (dot(M_i * grad(v), grad(psi_v)) * dx)
+            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dx)
+            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dx)
+            + dt * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dx)
+            - (v_n * psi_v * dx)
         )
     else:
         F = (
-            u_1 * v_1 * dx
-            + theta * dt * (dot(M_i * grad(u_1), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_2), grad(v_1)) * dx)
-            + dt * (dot(M_i * grad(u_1), grad(v_2)) * dx)
-            + (dt/theta) * (dot((M_i + M_e) * grad(u_2), grad(v_2)) * dx)
-            - (u_n1 * v_1 * dx)
-            + (1 - theta) * dt * (dot(M_i * grad(u_n1), grad(v_1)) * dx)
-            + dt * ((1 - theta)/theta) * (dot(M_i * grad(u_n1), grad(v_2)) * dx)
+            v * psi_v * dx
+            + theta * dt * (dot(M_i * grad(v), grad(psi_v)) * dx)
+            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dx)
+            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dx)
+            + (dt/theta) * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dx)
+            - (v_n * psi_v * dx)
+            + (1 - theta) * dt * (dot(M_i * grad(v_n), grad(psi_v)) * dx)
+            + dt * ((1 - theta)/theta) * (dot(M_i * grad(v_n), grad(psi_ue)) * dx)
         )
 
     a, L = lhs(F), rhs(F)
 
     vu = Function(VU)  # u from step 2, inital value for step 3
     solve(a == L, vu)
-    v, u = vu.split(True)
+    v, u_e = vu.split(True)
+
+    return v, u_e
 
 
-    return v
-
-
-def step(VU, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
+def step(VU, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
     V = VU.sub(0).collapse()
 
-    u0 = np.array(u0)
+    v0 = np.array(v0)
     w0 = np.array(w0)
 
     # Step one
-    v_values = np.zeros(len(u0))
-    w_values = np.zeros(len(u0))
+    v_values = np.zeros(len(v0))
+    w_values = np.zeros(len(v0))
 
     t = np.array([tn, tn + theta * dt])
-    for i in range(len(u0)):
-        v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
+    for i in range(len(v0)):
+        v_values[i], w_values[i] = odeint(derivative, [v0[i], w0[i]], t)[-1]
 
-    u_n = Function(V)
-    u_n.vector()[:] = v_values
+    v_n = Function(V)
+    v_n.vector()[:] = v_values
 
 
     # Step two
-    u = bidomain_model(VU, theta, u_n, dt)
+    v, u_e = bidomain_model(VU, theta, v_n, dt)
 
 
     # Step three
     if theta == 0.5:
-        new_v_values= np.zeros(len(u0))
-        new_w_values = np.zeros(len(u0))
+        new_v_values= np.zeros(len(v0))
+        new_w_values = np.zeros(len(v0))
 
-        u_n = u.vector()[:]
+        v_n = v.vector()[:]
         t = np.array([tn + theta * dt, tn + dt])
-        for i in range(len(u0)):
-            new_v_values[i], new_w_values[i] = odeint(derivative, [u_n[i], w_values[i]], t)[-1]
+        for i in range(len(v0)):
+            new_v_values[i], new_w_values[i] = odeint(derivative, [v_n[i], w_values[i]], t)[-1]
 
-        u_new = Function(V)
-        u_new.vector()[:] = new_v_values
-        u = u_new
+        v_new = Function(V)
+        v_new.vector()[:] = new_v_values
+        v = v_new
 
 
-    return u, w_values
+    return v, w_values, u_e
 
 
 def save_for_line_plot(u):
@@ -114,7 +111,7 @@ def save_for_line_plot(u):
     points = [(x_, 10) for x_ in x]  # 2D points
     u_line = np.array([u(point) for point in points])
     #p_line = np.array([p(point) for point in points])
-    np.savetxt('bi.txt', u_line)
+    np.savetxt('bi_ue_T-2dt.txt', u_line)
 
 
 def run_solver(make_gif, dimension):
@@ -130,11 +127,11 @@ def run_solver(make_gif, dimension):
 
     if dimension == "1D":
         mesh = IntervalMesh(Nx, 0, 20)
-        u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        v0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-        #u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
-        u0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
+        #v0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        v0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
 
     V = FunctionSpace(mesh, "P", degree)
 
@@ -144,15 +141,15 @@ def run_solver(make_gif, dimension):
     VU = FunctionSpace(mesh, MixedElement((Ve,Ue)))
 
 
-    u0 = interpolate(u0, V)
-    #print(u0.vector()[:])
+    v0 = interpolate(v0, V)   #Finds all the x and y points that fullfills the criteria given in Expression
+    #print(v0.vector()[:])
 
     x0 = Expression('x[0]', degree=0)
-    x0 = interpolate(x0, V)
+    x0 = interpolate(x0, V)   #Finds all the x points that is used in functionspace V
     #np.save("x0", x0.vector()[:])
 
-    u0 = u0.vector()[:]
-    w0 = np.zeros(len(u0))
+    v0 = v0.vector()[:]
+    w0 = np.zeros(len(v0))
 
     derivative = fitzhugh_nagumo_reparameterized
 
@@ -161,17 +158,21 @@ def run_solver(make_gif, dimension):
     skip_frames = 5
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
-        u, w = step(VU, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
+        v, w, u_e = step(VU, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative)
         tn += dt
-        u0 = u.vector()[:]
+        v0 = v.vector()[:]
         w0 = w
+
+        if tn == T - 2*dt:
+            print(tn)
+            save_for_line_plot(u_e)
 
         if make_gif:
             if i == count:
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
                 if dimension == "1D":
-                    plt.plot(x0.vector()[:], u.vector()[:], label="v")
+                    plt.plot(x0.vector()[:], v.vector()[:], label="v")
                     plt.plot(x0.vector()[:], w, label="w")
                     plt.axis([0, 20, -100, 100])
                     plt.legend()
@@ -179,7 +180,7 @@ def run_solver(make_gif, dimension):
                     plt.ylabel("[mV]")
 
                 if dimension == "2D":
-                    c = plot(u, mode='color', vmin=-85, vmax=40)
+                    c = plot(v, mode='color', vmin=-85, vmax=40)
                     plt.colorbar(c, orientation='vertical')
                     plt.xlabel("x [mm]")
                     plt.ylabel("y [mm]")
@@ -189,7 +190,7 @@ def run_solver(make_gif, dimension):
 
                 count += skip_frames
 
-    save_for_line_plot(u)
+    save_for_line_plot(u_e)
 
 
     if make_gif:
@@ -217,4 +218,4 @@ def run_solver(make_gif, dimension):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True, dimension="2D")
+    run_solver(make_gif=False, dimension="2D")
