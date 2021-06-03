@@ -21,6 +21,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from cbcbeat import *
 from dolfin import *
+import dolfin as df
+#print (df.__version__)
 
 # Turn on FFC/FEniCS optimizations
 parameters["form_compiler"]["representation"] = "uflacs"
@@ -34,18 +36,33 @@ import cbcbeat
 if cbcbeat.dolfin_adjoint:
     parameters["adjoint"]["stop_annotating"] = True
 
-
-
 # Define the computational domain
 Nx = 50
 Ny = 50
-mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-#submesh = RectangleMesh(Point(9, 9), Point(11, 11), Nx, Ny)
+#mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
 time = Constant(0.0)
 
-tol = 1E-14
+def circle_heart(x,y):
+    r = 0.25
+    xshift = x - 0.5
+    yshift = y - 0.5
+    return xshift*xshift + yshift*yshift < r*r
 
-subdomain = CompiledSubDomain('(x[0] <= 12.0 && x[0] >= 8.0 && x[1] <= 12.0 && x[1] >= 8.0) ? 0 : -85', tol=tol)
+def beutel_heart(x,y):
+    a = 0.05
+    xshift = x - 0.5
+    yshift = y - 0.5
+    return (xshift*xshift + yshift*yshift - a)*(xshift*xshift + yshift*yshift - a)*(xshift*xshift + yshift*yshift - a) < xshift*xshift*yshift*yshift*yshift
+
+
+mesh = UnitSquareMesh(Nx, Ny)
+marker = MeshFunction("size_t", mesh, mesh.topology().dim(), 0)
+
+# Create the submeshes
+for c in cells(mesh):
+    marker[c] = circle_heart(c.midpoint().x(), c.midpoint().y()) ## Beutel heart
+
+submesh_heart = MeshView.create(marker, 1) # Heart
 
 
 # Define the conductivity (tensors)
@@ -65,7 +82,7 @@ cell_model = FitzHughNagumoManual()
 stimulus = Expression("10*t*x[0]", t=time, degree=1)
 
 # Collect this information into the CardiacModel class
-cardiac_model = CardiacModel(mesh, time, M_i, M_e, cell_model, stimulus)
+cardiac_model = CardiacModel(submesh_heart, time, M_i, M_e, cell_model, stimulus)
 
 
 # Customize and create a splitting solver
@@ -108,11 +125,11 @@ timer.stop()
 # Visualize some results
 plt.figure()
 plot(vs[0], title="Transmembrane potential (v) at end time")
-plt.savefig("TransmembranePot3.png")
+plt.savefig("TransmembranePot.png")
 plt.figure()
 plot(vs[-1], title="1st state variable (s_0) at end time")
-plt.savefig("s_0(T)3.png")
+plt.savefig("s_0(T).png")
 # List times spent
 #list_timings(TimingClear.keep, [TimingType.user])
 
-print("Success!")
+#print("Success!")
