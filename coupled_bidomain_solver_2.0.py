@@ -138,7 +138,7 @@ def run_solver(make_gif, dimension):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
-    N = 200
+    N = 100
     Nx = 50
     Ny = 50
     T = 500.0                       # [ms]
@@ -152,7 +152,7 @@ def run_solver(make_gif, dimension):
 
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-        v0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        v0 = Expression('x[0] <= 2 ? 0 : -85', degree=0)
         #v0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
         #v0 = Expression('(x[0] <= 12.0 && x[0] >= 8.0 && x[1] <= 12.0 && x[1] >= 8.0) ? 0 : -85', degree=0)
         #submesh = RectangleMesh(Point(9, 9), Point(11, 11), Nx, Ny)
@@ -184,6 +184,7 @@ def run_solver(make_gif, dimension):
     W = FunctionSpace(mesh, MixedElement((H_space,V_space)))
 
 
+
     v0 = interpolate(v0, W.sub(1).collapse())   #Finds all the x and y points that fullfills the criteria given in Expression
     #print(v0.vector()[:])
 
@@ -201,6 +202,7 @@ def run_solver(make_gif, dimension):
     count = 0
     skip_frames = 5
     v_array = np.zeros((3,N+1))
+    count_index = 0
 
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
@@ -213,10 +215,10 @@ def run_solver(make_gif, dimension):
         #    print(tn)
         #    save_for_line_plot(v)
 
-        v_array[0][count] = v(2,10)
-        v_array[1][count] = v(10,10)
-        v_array[2][count] = v(18,10)
-
+        v_array[0][count_index] = v(2,10)
+        v_array[1][count_index] = v(10,10)
+        v_array[2][count_index] = v(18,10)
+        count_index += 1
 
         if make_gif:
             if i == count:
@@ -242,6 +244,7 @@ def run_solver(make_gif, dimension):
                     plt.savefig(f"v_final.png")
 
                 count += skip_frames
+
 
     plt.figure()
     t = np.linspace(0, T, N+1)

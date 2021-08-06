@@ -61,7 +61,6 @@ cell_model = FitzHughNagumoManual()
 # Define some external stimulus
 #stimulus = Expression("10*x[0]", degree=1)
 stimulus = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
-#stimulus = None
 
 # Collect this information into the CardiacModel class
 cardiac_model = CardiacModel(submesh, mesh, time, M_i, M_e, cell_model, stimulus)
@@ -86,7 +85,7 @@ vs_.assign(cell_model.initial_conditions())
 
 # Time stepping parameters
 
-N = 200 #1000 #2000
+N = 1000 #1000 #2000
 T = 500 #300 #500
 dt = T / N
 
@@ -107,6 +106,8 @@ for (timestep, fields) in solver.solve(interval, dt):
     v_array[0][count] = vs(2,10)[0]
     v_array[1][count] = vs(10,10)[0]
     v_array[2][count] = vs(18,10)[0]
+
+    #print(vs_(count,10)[0])
 
     count += 1
 
