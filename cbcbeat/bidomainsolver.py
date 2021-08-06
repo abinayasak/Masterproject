@@ -511,7 +511,7 @@ class BidomainSolver(BasicBidomainSolver):
 
 
 
-        """Dt_v_k_n = (v - self.v_)
+        Dt_v_k_n = (v - self.v_)
         v_mid = theta*v + (1.0 - theta)*self.v_
         #theta_parabolic er med tidsderivert
         theta_parabolic = (inner(1000*M_i*grad(v_mid), grad(w))*dH
@@ -521,10 +521,10 @@ class BidomainSolver(BasicBidomainSolver):
                           + inner((M_i + M_e)*grad(u), grad(q))*dV)
 
         G = (Dt_v_k_n*w*dH + k_n*theta_parabolic + k_n*theta_elliptic
-             - k_n*rhs + (k_n/theta)*(dot(0.25*M_e * grad(u), grad(q)) * dV))"""
+             - k_n*rhs + (k_n/theta)*(dot(0.25*M_e * grad(u), grad(q)) * dV))
 
 
-        G = (
+        """G = (
             v * w * dH
             + theta * k_n * (dot(M_i * grad(v), grad(w)) * dH)
             + k_n * (dot(M_i * grad(u), grad(w)) * dH)
@@ -534,7 +534,7 @@ class BidomainSolver(BasicBidomainSolver):
             - (self.v_ * w * dH)
             + (1 - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dH)
             + ((1 - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dV)
-        )
+        )"""
 
 
         if use_R:
