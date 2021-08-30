@@ -114,20 +114,20 @@ class BasicBidomainSolver(object):
 
         # Set-up function spaces
         k = self.parameters["polynomial_degree"]
-        Ve = FiniteElement("CG", self._submesh.ufl_cell(), k)
+        Ve = FiniteElement("CG", self._mesh.ufl_cell(), k)
         V = FunctionSpace(self._mesh, "CG", k)
-        Ue = FiniteElement("CG", self._mesh.ufl_cell(), k)
+        Ue = FiniteElement("CG", self._submesh.ufl_cell(), k)
         U = FunctionSpace(self._mesh, "CG", k)
 
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
-            print('using use_R')
+            #print('using use_R')
             Re = FiniteElement("R", self._mesh.ufl_cell(), 0)
             R = FunctionSpace(self._mesh, "R", 0)
             self.VUR = FunctionSpace(mesh, MixedElement((Ve, Ue, Re)))
             #self.VUR = MixedFunctionSpace(H,V)
         else:
-            print('not using use_R')
+            #print('not using use_R')
             self.VUR = FunctionSpace(mesh, MixedElement((Ve, Ue)))
             #self.VUR = MixedFunctionSpace(H,V)
 
@@ -496,10 +496,14 @@ class BidomainSolver(BasicBidomainSolver):
              (v, u) = TrialFunctions(self.VUR)
              (w, q) = TestFunctions(self.VUR)
 
+
+        #print(k_n)
+
         # Set-up measure and rhs from stimulus
-        #print(self._I_s)
+        #if k_n >= 50 and k_n <= 60:
         (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
 
+        #rhs = I_s*w*dz()
 
         dH = Measure("dx", domain=self.VUR.sub(0).mesh())
         dV = Measure("dx", domain=self.VUR.sub(1).mesh())
@@ -510,21 +514,19 @@ class BidomainSolver(BasicBidomainSolver):
         print("variational problems next..")
 
 
-
-        Dt_v_k_n = (v - self.v_)
+        """Dt_v_k_n = (v - self.v_)
         v_mid = theta*v + (1.0 - theta)*self.v_
         #theta_parabolic er med tidsderivert
-        theta_parabolic = (inner(1000*M_i*grad(v_mid), grad(w))*dH
-                           + inner(M_i*grad(u), grad(w))*dH)
+        theta_parabolic = (dot(M_i*grad(v_mid), grad(w))*dH
+                           + dot(M_i*grad(u), grad(w))*dH)
         #theta_elliptic er uten tidsderivert
-        theta_elliptic = (inner(M_i*grad(v_mid), grad(q))*dV
-                          + inner((M_i + M_e)*grad(u), grad(q))*dV)
+        theta_elliptic = (dot(M_i*grad(v_mid), grad(q))*dV
+                          + dot((M_i + M_e)*grad(u), grad(q))*dV)
 
         G = (Dt_v_k_n*w*dH + k_n*theta_parabolic + k_n*theta_elliptic
-             - k_n*rhs + (k_n/theta)*(dot(0.25*M_e * grad(u), grad(q)) * dV))
+             - k_n*rhs + (k_n/theta)*(dot(0.25*M_e * grad(u), grad(q)) * dV))"""
 
-
-        """G = (
+        G = (
             v * w * dH
             + theta * k_n * (dot(M_i * grad(v), grad(w)) * dH)
             + k_n * (dot(M_i * grad(u), grad(w)) * dH)
@@ -534,8 +536,11 @@ class BidomainSolver(BasicBidomainSolver):
             - (self.v_ * w * dH)
             + (1 - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dH)
             + ((1 - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dV)
-        )"""
+            - k_n*rhs
+        )
 
+        #if k_n >= 50 and k_n <= 60:
+        #    G -= k_n*rhs
 
         if use_R:
             G += k_n*(lamda*u + l*q)*dz()
@@ -543,9 +548,11 @@ class BidomainSolver(BasicBidomainSolver):
         # Add applied current as source in elliptic equation if
         # applicable
         if self._I_a:
+            print("if self._I_a activated")
             G -= k_n*self._I_a*q*dz()
 
         (a, L) = system(G)
+
         return (a, L)
 
     def step(self, interval):
@@ -574,6 +581,7 @@ class BidomainSolver(BasicBidomainSolver):
 
         # Update matrix and linear solvers etc as needed
         if self._timestep is None:
+            #print("timestep is None")
             self._timestep = Constant(dt)
             (self._lhs, self._rhs) = self.variational_forms(self._timestep)
 
@@ -587,6 +595,7 @@ class BidomainSolver(BasicBidomainSolver):
             # Create linear solver (based on parameter choices)
             self._linear_solver, self._update_solver = self._create_linear_solver()
         else:
+            #print("timestep is else")
             timestep_unchanged = (abs(dt - float(self._timestep)) < 1.e-12)
             self._update_solver(timestep_unchanged, dt)
 

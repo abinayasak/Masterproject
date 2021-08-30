@@ -26,14 +26,15 @@ def rhs_with_markerwise_field(g, mesh, v):
         dz = dx
         rhs = 0.0
     elif isinstance(g, Markerwise):
-        print('inside rhs_with_markerwise_field elif option')
+        #print('inside rhs_with_markerwise_field elif option')
         markers = g.markers()
         dz = Measure("dx", domain=mesh, subdomain_data=markers)
         rhs = sum([g*v*dz(i) for (i, g) in zip(g.keys(), g.values())])
     else:
-        print('inside rhs_with_markerwise_field else option')
+        #print('inside rhs_with_markerwise_field else option')
         dz = dx
         rhs = g*v*dz()
+
     return (dz, rhs)
 
 class Markerwise(object):
