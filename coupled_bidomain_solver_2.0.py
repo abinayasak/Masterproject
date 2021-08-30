@@ -53,6 +53,7 @@ def bidomain_model(W, theta, v_n, dt):
     dH = Measure("dx", domain=W.sub(0).mesh())
     dV = Measure("dx", domain=W.sub(1).mesh())
 
+
     if theta == 1:
         F = (
             v * psi_v * dH
@@ -62,6 +63,7 @@ def bidomain_model(W, theta, v_n, dt):
             + dt * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV)
             + dt * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
             - (v_n * psi_v * dH)
+
         )
     else:
         F = (
@@ -138,10 +140,10 @@ def run_solver(make_gif, dimension):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
-    N = 100
+    N = 200
     Nx = 50
     Ny = 50
-    T = 500.0                       # [ms]
+    T = 750                         # [ms]
     dt = T / N                      # [ms]
     t = np.linspace(0, T, N+1)      # [ms]
 
@@ -152,10 +154,8 @@ def run_solver(make_gif, dimension):
 
     if dimension == "2D":
         mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-        v0 = Expression('x[0] <= 2 ? 0 : -85', degree=0)
-        #v0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
-        #v0 = Expression('(x[0] <= 12.0 && x[0] >= 8.0 && x[1] <= 12.0 && x[1] >= 8.0) ? 0 : -85', degree=0)
-        #submesh = RectangleMesh(Point(9, 9), Point(11, 11), Nx, Ny)
+        #v0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+        v0 = Expression('(x[0] <= 2.0 && x[1] <= 2.0) ? 0 : -85', degree=0)
 
         def circle_heart(x,y):
             r = 0.25
@@ -164,19 +164,13 @@ def run_solver(make_gif, dimension):
             return xshift*xshift + yshift*yshift < r*r
 
 
-        # Define the computational domain
-        #mesh = UnitSquareMesh(Nx, Ny)
         marker = MeshFunction("size_t", mesh, mesh.topology().dim(), 0)
 
-        # Create the submeshes
         for c in cells(mesh):
             marker[c] = circle_heart(c.midpoint().x(), c.midpoint().y()) ## Beutel heart
 
         submesh = MeshView.create(marker, 1) # Heart
 
-
-
-    #V = FunctionSpace(mesh, "P", degree)
 
     H_space = FiniteElement("CG", submesh.ufl_cell(), 1)
     V_space = FiniteElement("CG", mesh.ufl_cell(), 1)
@@ -285,4 +279,4 @@ def run_solver(make_gif, dimension):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True, dimension="2D")
+    run_solver(make_gif=False, dimension="2D")

@@ -41,7 +41,6 @@ submesh = MeshView.create(marker, 1) # Heart
 V = FunctionSpace(mesh, "Lagrange", 1)
 H = FunctionSpace(submesh_heart, "Lagrange", 1) # Heart
 #T = FunctionSpace(submesh_torso, "Lagrange", 1) # Torso
-
 # Define the product function space
 W = MixedFunctionSpace(H,V)
 """
@@ -59,8 +58,19 @@ cell_model = FitzHughNagumoManual()
 
 
 # Define some external stimulus
-#stimulus = Expression("10*x[0]", degree=1)
-stimulus = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+duration = 100. # ms
+A = 50000. # mu A/cm^3
+cm2mm = 10.
+factor = 1.0/(chi*C_m) # NB: cbcbeat convention
+amplitude = factor*A*(1./cm2mm)**3 # mV/ms
+I_s = Expression("time >= start ? (time <= (duration + start) ? amplitude : 0.0) : 0.0",
+                  time=time,
+                  start=0.0,
+                  duration=duration,
+                  amplitude=amplitude,
+                  degree=0)
+# Store input parameters in cardiac model
+stimulus = Markerwise((I_s,), (1,), marker)
 
 # Collect this information into the CardiacModel class
 cardiac_model = CardiacModel(submesh, mesh, time, M_i, M_e, cell_model, stimulus)
@@ -86,7 +96,7 @@ vs_.assign(cell_model.initial_conditions())
 # Time stepping parameters
 
 N = 1000 #1000 #2000
-T = 500 #300 #500
+T = 750 #300 #500
 dt = T / N
 
 interval = (0.0, T)
