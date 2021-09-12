@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 from dolfin import *
+np.set_printoptions(threshold=np.inf)
 
 # Turn on FFC/FEniCS optimizations
 parameters["form_compiler"]["representation"] = "uflacs"
@@ -87,8 +88,8 @@ def bidomain_model(W, theta, v_n, dt):
     return v, u_e
 
 
-def step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
-    V = W.sub(1).collapse()
+def step(V, W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
+    #V = W.sub(1).collapse()
 
     v0 = np.array(v0)
     w0 = np.array(w0)
@@ -127,20 +128,19 @@ def step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative):
     return v, w_values, u_e
 
 
-def save_for_line_plot(v):
+def save_for_line_plot(v, name):
     tol = 0.001  # avoid hitting points outside the domain
     x = np.linspace(tol, 20 - tol, 101)
     points = [(x_, 10) for x_ in x]  # 2D points
     v_line = np.array([v(point) for point in points])
-    #p_line = np.array([p(point) for point in points])
-    np.savetxt('bi_coupled_v_T.txt', v_line)
+    np.savetxt(name, v_line)
 
 
 def run_solver(make_gif, dimension):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
-    N = 200
+    N = 10
     Nx = 50
     Ny = 50
     T = 750                         # [ms]
@@ -176,8 +176,7 @@ def run_solver(make_gif, dimension):
     V_space = FiniteElement("CG", mesh.ufl_cell(), 1)
 
     W = FunctionSpace(mesh, MixedElement((H_space,V_space)))
-
-
+    V = W.sub(1).collapse()
 
     v0 = interpolate(v0, W.sub(1).collapse())   #Finds all the x and y points that fullfills the criteria given in Expression
     #print(v0.vector()[:])
@@ -186,7 +185,6 @@ def run_solver(make_gif, dimension):
     x0 = interpolate(x0, W.sub(1).collapse())   #Finds all the x points that is used in functionspace V
     #np.save("x0", x0.vector()[:])
 
-
     v0 = v0.vector()[:]
     w0 = np.zeros(len(v0))
 
@@ -194,25 +192,36 @@ def run_solver(make_gif, dimension):
 
     tn = 0
     count = 0
+    count_index = 0
     skip_frames = 5
     v_array = np.zeros((3,N+1))
-    count_index = 0
+
+    out_v = File("paraview/coupled_bidomain_v.pvd")
+    #out_u = File("paraview/coupled_bidomain_u.pvd")
+
 
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
-        v, w, u_e = step(W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative)
+        v, w, u_e = step(V, W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative)
+        out_v << v
+        #print(v.vector()[:])
         tn += dt
         v0 = v.vector()[:]
         w0 = w
 
-        #if tn == T - 1*dt:
-        #    print(tn)
-        #    save_for_line_plot(v)
+        """if tn == t[50]:#T - 50*dt:
+            print(tn)
+            save_for_line_plot(v, 'v.txt')
+            save_for_line_plot(u_e, 'u.txt')
+        """
 
         v_array[0][count_index] = v(2,10)
         v_array[1][count_index] = v(10,10)
         v_array[2][count_index] = v(18,10)
         count_index += 1
+
+
+        #out_u << u_e
 
         if make_gif:
             if i == count:

@@ -27,8 +27,10 @@ def circle_heart(x,y):
 # Define the computational domain
 Nx = 50
 Ny = 50
+Nz = 50
 time = Constant(0)
 mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
+#mesh = BoxMesh(Point(0, 0, 0), Point(20, 20, 20), Nx, Ny, Nz)
 marker = MeshFunction("size_t", mesh, mesh.topology().dim(), 0)
 
 # Create the submeshes
@@ -95,34 +97,45 @@ vs_.assign(cell_model.initial_conditions())
 
 # Time stepping parameters
 
-N = 1000 #1000 #2000
+N = 500 #1000 #2000
 T = 750 #300 #500
 dt = T / N
 
 interval = (0.0, T)
 
+out_v = File("paraview_cbcbeat/bidomain_v.pvd")
+#out_u = File("paraview_cbcbeat/bidomain_u.pvd")
 
 # Solve
 count = 0
 v_array = np.zeros((3,N))
 t = np.zeros(N)
 for (timestep, fields) in solver.solve(interval, dt):
-    #print("(t_0, t_1) = (%g, %g)", timestep)
-    #print(timestep[0])
+    print("(t_0, t_1) = (%g, %g)", timestep)
     # Extract the components of the field (vs_ at previous timestep,
     # current vs, current vur)
+    """
+     * "vs" (:py:class:`dolfin.Function`) representing the solution
+       for the transmembrane potential and any additional statevariables
+     * "vur" (:py:class:`dolfin.Function`) representing the
+       transmembrane potential in combination with the extracellular
+       potential and an additional Lagrange multiplier.
+    """
+
     (vs_, vs, vur) = fields
     t[count] = timestep[1]
-    v_array[0][count] = vs(2,10)[0]
-    v_array[1][count] = vs(10,10)[0]
-    v_array[2][count] = vs(18,10)[0]
-
-    #print(vs_(count,10)[0])
+    #v_array[0][count] = vs(2,10)[0]
+    #v_array[1][count] = vs(10,10)[0]
+    #v_array[2][count] = vs(18,10)[0]
+    #print(vs.vector()[::2])
+    #print(vs.vector()[1::2])
+    out_v << vs
+    #out_u << vur
 
     count += 1
 
 
-plt.plot(t, v_array[0], label="(2,10)")
+"""plt.plot(t, v_array[0], label="(2,10)")
 plt.plot(t, v_array[1], label="(10,10)")
 plt.plot(t, v_array[2], label="(18,10)")
 plt.xlabel("t")
@@ -131,14 +144,18 @@ plt.ylabel("v")
 plt.title("Transmembrane potential v at three different points")
 plt.legend()
 plt.savefig("plots_cbcbeat/TransmembranePlot.png")
+"""
+
+
+
 
 
 # Visualize some results
-plt.figure()
+"""plt.figure()
 plot(vs[0], title="Transmembrane potential (v) at end time")
 c = plot(vs[0], title="Transmembrane potential (v) at end time", mode='color', vmin=-85, vmax=40)
 plt.colorbar(c, orientation='vertical')
 plt.savefig("TransmembranePot.png")
 plt.figure()
 plot(vs[-1], title="1st state variable (s_0) at end time")
-plt.savefig("s_0(T).png")
+plt.savefig("s_0(T).png")"""
