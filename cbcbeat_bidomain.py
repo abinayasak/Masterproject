@@ -23,14 +23,18 @@ def circle_heart(x,y):
     return xshift*xshift + yshift*yshift < r*r
 
 
+boxmesh = False
+rectanglemesh = True
 
 # Define the computational domain
-Nx = 50
-Ny = 50
-Nz = 50
+Nx = 40
+Ny = 40
+Nz = 40
 time = Constant(0)
-mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
-#mesh = BoxMesh(Point(0, 0, 0), Point(20, 20, 20), Nx, Ny, Nz)
+if rectanglemesh:
+    mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
+if boxmesh:
+    mesh = BoxMesh(Point(0, 0, 0), Point(20, 20, 20), Nx, Ny, Nz)
 marker = MeshFunction("size_t", mesh, mesh.topology().dim(), 0)
 
 # Create the submeshes
@@ -39,13 +43,6 @@ for c in cells(mesh):
 
 submesh = MeshView.create(marker, 1) # Heart
 
-"""
-V = FunctionSpace(mesh, "Lagrange", 1)
-H = FunctionSpace(submesh_heart, "Lagrange", 1) # Heart
-#T = FunctionSpace(submesh_torso, "Lagrange", 1) # Torso
-# Define the product function space
-W = MixedFunctionSpace(H,V)
-"""
 
 # Define the conductivity (tensors)
 sigma_e = 0.62                      # [Sm^-1]
@@ -64,7 +61,13 @@ duration = 100. # ms
 A = 50000. # mu A/cm^3
 cm2mm = 10.
 factor = 1.0/(chi*C_m) # NB: cbcbeat convention
-amplitude = factor*A*(1./cm2mm)**3 # mV/ms
+#amplitude = factor*A*(1./cm2mm)**3 # mV/ms
+if rectanglemesh:
+    #amplitude = amplitude
+    amplitude = Expression('x[0] <= 1.0 ? 40 : 0', degree=0)
+if boxmesh:
+    amplitude = 4*amplitude
+
 I_s = Expression("time >= start ? (time <= (duration + start) ? amplitude : 0.0) : 0.0",
                   time=time,
                   start=0.0,
@@ -97,14 +100,19 @@ vs_.assign(cell_model.initial_conditions())
 
 # Time stepping parameters
 
-N = 500 #1000 #2000
-T = 750 #300 #500
+N = 500
+T = 750
 dt = T / N
 
 interval = (0.0, T)
 
-out_v = File("paraview_cbcbeat/bidomain_v.pvd")
-#out_u = File("paraview_cbcbeat/bidomain_u.pvd")
+if rectanglemesh:
+    out_v = File("paraview_cbcbeat_rectanglemesh/bidomain_v.pvd")
+    out_u = File("paraview_cbcbeat_rectanglemesh/bidomain_u.pvd")
+
+if boxmesh:
+    out_v = File("paraview_cbcbeat_boxmesh/bidomain_v.pvd")
+    out_u = File("paraview_cbcbeat_boxmesh/bidomain_u.pvd")
 
 # Solve
 count = 0
@@ -124,18 +132,18 @@ for (timestep, fields) in solver.solve(interval, dt):
 
     (vs_, vs, vur) = fields
     t[count] = timestep[1]
-    #v_array[0][count] = vs(2,10)[0]
-    #v_array[1][count] = vs(10,10)[0]
-    #v_array[2][count] = vs(18,10)[0]
+    v_array[0][count] = vs(2,10)[0]
+    v_array[1][count] = vs(10,10)[0]
+    v_array[2][count] = vs(18,10)[0]
     #print(vs.vector()[::2])
     #print(vs.vector()[1::2])
-    out_v << vs
-    #out_u << vur
+    out_v << vs.sub(0)
+    out_u << vur.sub(1)
 
     count += 1
 
 
-"""plt.plot(t, v_array[0], label="(2,10)")
+plt.plot(t, v_array[0], label="(2,10)")
 plt.plot(t, v_array[1], label="(10,10)")
 plt.plot(t, v_array[2], label="(18,10)")
 plt.xlabel("t")
@@ -144,10 +152,6 @@ plt.ylabel("v")
 plt.title("Transmembrane potential v at three different points")
 plt.legend()
 plt.savefig("plots_cbcbeat/TransmembranePlot.png")
-"""
-
-
-
 
 
 # Visualize some results
