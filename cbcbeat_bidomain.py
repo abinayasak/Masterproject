@@ -31,16 +31,19 @@ Nx = 40
 Ny = 40
 Nz = 40
 time = Constant(0)
+
+
 if rectanglemesh:
     mesh = RectangleMesh(Point(0, 0), Point(20, 20), Nx, Ny)
+    #mesh = Mesh('pre_torso.xml')
 if boxmesh:
     mesh = BoxMesh(Point(0, 0, 0), Point(20, 20, 20), Nx, Ny, Nz)
-marker = MeshFunction("size_t", mesh, mesh.topology().dim(), 0)
 
+
+marker = MeshFunction("size_t", mesh, mesh.topology().dim(), mesh.domains())
 # Create the submeshes
 for c in cells(mesh):
     marker[c] = circle_heart(c.midpoint().x(), c.midpoint().y()) ## Beutel heart
-
 submesh = MeshView.create(marker, 1) # Heart
 
 
@@ -61,12 +64,14 @@ duration = 100. # ms
 A = 50000. # mu A/cm^3
 cm2mm = 10.
 factor = 1.0/(chi*C_m) # NB: cbcbeat convention
-#amplitude = factor*A*(1./cm2mm)**3 # mV/ms
-if rectanglemesh:
-    #amplitude = amplitude
-    amplitude = Expression('x[0] <= 1.0 ? 40 : 0', degree=0)
-if boxmesh:
-    amplitude = 4*amplitude
+amplitude = factor*A*(1./cm2mm)**3 # mV/ms
+
+
+S1_marker = 1
+L = 1.0
+S1_subdomain = CompiledSubDomain("x[0] <= L", L=L)
+S1_markers = MeshFunction("size_t", mesh, mesh.topology().dim())
+S1_subdomain.mark(S1_markers, S1_marker)
 
 I_s = Expression("time >= start ? (time <= (duration + start) ? amplitude : 0.0) : 0.0",
                   time=time,
@@ -74,8 +79,8 @@ I_s = Expression("time >= start ? (time <= (duration + start) ? amplitude : 0.0)
                   duration=duration,
                   amplitude=amplitude,
                   degree=0)
-# Store input parameters in cardiac model
-stimulus = Markerwise((I_s,), (1,), marker)
+
+stimulus = Markerwise((I_s,), (1,), S1_markers)
 
 # Collect this information into the CardiacModel class
 cardiac_model = CardiacModel(submesh, mesh, time, M_i, M_e, cell_model, stimulus)
@@ -120,8 +125,7 @@ v_array = np.zeros((3,N))
 t = np.zeros(N)
 for (timestep, fields) in solver.solve(interval, dt):
     print("(t_0, t_1) = (%g, %g)", timestep)
-    # Extract the components of the field (vs_ at previous timestep,
-    # current vs, current vur)
+
     """
      * "vs" (:py:class:`dolfin.Function`) representing the solution
        for the transmembrane potential and any additional statevariables
@@ -135,8 +139,7 @@ for (timestep, fields) in solver.solve(interval, dt):
     v_array[0][count] = vs(2,10)[0]
     v_array[1][count] = vs(10,10)[0]
     v_array[2][count] = vs(18,10)[0]
-    #print(vs.vector()[::2])
-    #print(vs.vector()[1::2])
+
     out_v << vs.sub(0)
     out_u << vur.sub(1)
 
@@ -148,7 +151,6 @@ plt.plot(t, v_array[1], label="(10,10)")
 plt.plot(t, v_array[2], label="(18,10)")
 plt.xlabel("t")
 plt.ylabel("v")
-#plt.axis([0,200,-90,40])
 plt.title("Transmembrane potential v at three different points")
 plt.legend()
 plt.savefig("plots_cbcbeat/TransmembranePlot.png")
