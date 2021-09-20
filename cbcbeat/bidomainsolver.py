@@ -121,15 +121,11 @@ class BasicBidomainSolver(object):
 
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
-            #print('using use_R')
             Re = FiniteElement("R", self._mesh.ufl_cell(), 0)
             R = FunctionSpace(self._mesh, "R", 0)
             self.VUR = FunctionSpace(mesh, MixedElement((Ve, Ue, Re)))
-            #self.VUR = MixedFunctionSpace(H,V)
         else:
-            #print('not using use_R')
             self.VUR = FunctionSpace(mesh, MixedElement((Ve, Ue)))
-            #self.VUR = MixedFunctionSpace(H,V)
 
         self.V = V
 
@@ -552,7 +548,6 @@ class BidomainSolver(BasicBidomainSolver):
             G -= k_n*self._I_a*q*dz()
 
         (a, L) = system(G)
-
         return (a, L)
 
     def step(self, interval):
@@ -600,7 +595,7 @@ class BidomainSolver(BasicBidomainSolver):
             self._update_solver(timestep_unchanged, dt)
 
         # Assemble right-hand-side
-        assemble(self._rhs, tensor=self._rhs_vector, **self._annotate_kwargs)
+        assemble_mixed(self._rhs, tensor=self._rhs_vector, **self._annotate_kwargs)
 
         # Solve problem
         self.linear_solver.solve(self.vur.vector(), self._rhs_vector,
