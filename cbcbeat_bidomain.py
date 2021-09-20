@@ -20,7 +20,8 @@ def circle_heart(x,y):
     r = 0.25
     xshift = x - 0.5
     yshift = y - 0.5
-    return xshift*xshift + yshift*yshift < r*r
+    #return xshift*xshift + yshift*yshift < r*r
+    return x < 1.0
 
 
 boxmesh = False
@@ -70,7 +71,7 @@ amplitude = factor*A*(1./cm2mm)**3 # mV/ms
 S1_marker = 1
 L = 1.0
 S1_subdomain = CompiledSubDomain("x[0] <= L", L=L)
-S1_markers = MeshFunction("size_t", mesh, mesh.topology().dim())
+S1_markers = MeshFunction("size_t", submesh, submesh.topology().dim())
 S1_subdomain.mark(S1_markers, S1_marker)
 
 I_s = Expression("time >= start ? (time <= (duration + start) ? amplitude : 0.0) : 0.0",
