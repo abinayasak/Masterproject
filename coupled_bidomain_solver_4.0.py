@@ -241,6 +241,6 @@ if __name__ == "__main__":
     """
     The changes are:
     - MixedFunctionSpace: fixed the mesh/submesh problem
-    - Units from mm to cm: getting correct u plot, more motion in v but wrong plot
+    - Units from mm to cm: getting correct u plot, but wrong v plot
     - Variable 'solutions': fixed the two fields problem in paraview
     """
