@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 from dolfin import *
-#np.set_printoptions(threshold=np.inf)
 
 # Turn on FFC/FEniCS optimizations
 parameters["form_compiler"]["representation"] = "uflacs"
@@ -47,7 +46,6 @@ def bidomain_model(W, theta, v_n, dt):
     M_i = (sigma_i)/(C_m*chi)
     M_e = (sigma_e)/(C_m*chi)
     M_o = 0.25*M_e
-
 
     v, u_e = TrialFunctions(W)
     psi_v, psi_ue = TestFunctions(W)
@@ -238,3 +236,11 @@ def run_solver(make_gif, dimension):
 
 if __name__ == "__main__":
     run_solver(make_gif=True, dimension="2D")
+
+
+    """
+    The changes are:
+    - MixedFunctionSpace: fixed the mesh/submesh problem
+    - Units from mm to cm: getting correct u plot, more motion in v but wrong plot
+    - Variable 'solutions': fixed the two fields problem in paraview
+    """
