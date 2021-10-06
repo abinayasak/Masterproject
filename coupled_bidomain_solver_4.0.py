@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 from dolfin import *
-np.set_printoptions(threshold=np.inf)
+#np.set_printoptions(threshold=np.inf)
 
 # Turn on FFC/FEniCS optimizations
 parameters["form_compiler"]["representation"] = "uflacs"
@@ -40,28 +40,12 @@ def fitzhugh_nagumo_reparameterized(v, t):
 
 
 def bidomain_model(W, theta, v_n, dt):
-    """sigma_e = 0.62                      # [Sm^-1]
+    sigma_e = 0.62                      # [Sm^-1]
     sigma_i = 0.17                      # [Sm^-1]
-    chi = 140.                          # [mm^-1]
-    C_m = 0.01                          # [mu*F*mm−2]
+    chi = 1400.                         # [cm^-1]
+    C_m = 1.0                           # [mu*F*cm−2]
     M_i = (sigma_i)/(C_m*chi)
     M_e = (sigma_e)/(C_m*chi)
-    M_o = 0.25*M_e"""
-
-
-    C_m = 1.0 # Capacitance of the cell membrane [µF.cm-2]
-    chi = 2000 # area of cell membrane per unit volume [cm-1]
-
-    # Conductivities
-    sigma_i = 1.0 # [mS.cm-1]
-
-    M_i = (1/(C_m*chi))*sigma_i
-
-
-    sigma_e = 1.65 # [mS.cm-1]
-
-    M_e = (1/(C_m*chi))*sigma_e
-
     M_o = 0.25*M_e
 
 
@@ -72,58 +56,19 @@ def bidomain_model(W, theta, v_n, dt):
     dV = Measure("dx", domain=W.sub_space(1).mesh())
 
 
-    if theta == 1:
-        """F = (
-            v * psi_v * dH
-            + dt * (dot(M_i * grad(v), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dV)
-            + dt * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV)
-            + dt * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
-            - (v_n * psi_v * dH)
+    a = v * psi_v * dH \
+        + theta * dt * (dot(M_i * grad(v), grad(psi_v)) * dH) \
+        + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dH) \
+        + dt * (dot(M_i * grad(v), grad(psi_ue)) * dH) \
+        + (dt/theta) * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV) \
+        + (dt/theta) * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
 
-        )"""
-
-        a = v * psi_v * dH \
-            + dt * (inner(M_i * grad(v), grad(psi_v)) * dH) \
-            + dt * (inner(M_i * grad(u_e), grad(psi_v)) * dH) \
-            + dt * (inner(M_i * grad(v), grad(psi_ue)) * dH) \
-            + dt * (inner((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV) \
-            + dt * (inner(M_o * grad(u_e), grad(psi_ue)) * dV)
-
-        L = v_n * psi_v * dH
+    L = (v_n * psi_v * dH) \
+        - (1. - theta) * dt * (dot(M_i * grad(v_n), grad(psi_v)) * dH) \
+        - ((1. - theta)/theta) * (dot(M_i * grad(v_n), grad(psi_ue)) * dH)
 
 
-    else:
-        """F = (
-            v * psi_v * dH
-            + theta * dt * (dot(M_i * grad(v), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dH)
-            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dV)
-            + (dt/theta) * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV)
-            + (dt/theta) * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
-            - (v_n * psi_v * dH)
-            + (1. - theta) * dt * (dot(M_i * grad(v_n), grad(psi_v)) * dH)
-            + ((1. - theta)/theta) * (dot(M_i * grad(v_n), grad(psi_ue)) * dV)
-        )
-        """
-
-        a = v * psi_v * dH \
-            + theta * dt * (dot(M_i * grad(v), grad(psi_v)) * dH) \
-            + dt * (dot(M_i * grad(u_e), grad(psi_v)) * dH) \
-            + dt * (dot(M_i * grad(v), grad(psi_ue)) * dH) \
-            + (dt/theta) * (dot((M_i + M_e) * grad(u_e), grad(psi_ue)) * dV) \
-            + (dt/theta) * (dot(M_o * grad(u_e), grad(psi_ue)) * dV)
-
-        L = (v_n * psi_v * dH) \
-            - (1. - theta) * dt * (dot(M_i * grad(v_n), grad(psi_v)) * dH) \
-            - ((1. - theta)/theta) * (dot(M_i * grad(v_n), grad(psi_ue)) * dH)
-
-
-
-    #a, L = lhs(F), rhs(F)
-
-    vu = Function(W)  # u from step 2, inital value for step 3
+    vu = Function(W)
     solve(a == L, vu)
     v, u_e = vu.split(True)
 
@@ -132,7 +77,6 @@ def bidomain_model(W, theta, v_n, dt):
 
 def step(V, W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative, solutions):
 
-    print(v0)
     # Step one
     v_values = np.zeros(len(v0))
     w_values = np.zeros(len(v0))
@@ -141,7 +85,6 @@ def step(V, W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative, solution
     for i in range(len(v0)):
         v_values[i], w_values[i] = odeint(derivative, [v0[i], w0[i]], t)[-1]
 
-
     solutions.sub(0).vector()[:] = v_values
 
 
@@ -149,6 +92,7 @@ def step(V, W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative, solution
     v, u_e = bidomain_model(W, theta, solutions.sub(0), dt)
     solutions.sub(0).assign(v)
     solutions.sub(1).assign(u_e)
+
 
     # Step three
     if theta == 0.5:
@@ -160,8 +104,6 @@ def step(V, W, T, N, dt, tn, Nx, Ny, degree, v0, w0, theta, derivative, solution
         for i in range(len(v0)):
             new_v_values[i], new_w_values[i] = odeint(derivative, [v_n[i], w_values[i]], t)[-1]
 
-        #v_new = Function(V)
-        #v_new.vector()[:] = new_v_values
         solutions.sub(0).vector()[:] = new_v_values
         v = solutions.sub(0)
 
@@ -195,7 +137,6 @@ def run_solver(make_gif, dimension):
         submesh = IntervalMesh(Nx, 0, 20)
 
     if dimension == "2D":
-
         mesh = UnitSquareMesh(Nx, Ny)
         marker = MeshFunction("size_t", mesh, mesh.topology().dim(), 0)
 
@@ -204,7 +145,6 @@ def run_solver(make_gif, dimension):
             xshift = x - 0.5
             yshift = y - 0.5
             return xshift*xshift + yshift*yshift < r*r
-
 
         for c in cells(mesh):
             marker[c] = circle_heart(c.midpoint().x(), c.midpoint().y()) ## Beutel heart
@@ -219,10 +159,7 @@ def run_solver(make_gif, dimension):
     solutions = Function(W)
 
     f = Expression("5*exp(-(pow(x[0] - 0.5, 2) + pow(x[1] - 0.55, 2)) / 0.02)", degree=2)
-    #f = Expression('x[0] <= 0.3 ? 0 : -85', degree=0)
-    #f = Expression('(pow(x[0] - 0.5, 2) + pow(x[1] - 0.5, 2)) <= pow(0.05, 2)', degree=0)
-    solutions.sub(0).assign( f )
-
+    solutions.sub(0).assign(f)
 
 
     v0 = solutions.sub(0).vector()[:]
@@ -245,10 +182,8 @@ def run_solver(make_gif, dimension):
         v0 = solutions.sub(0).vector()[:]
         w0 = w
 
-        #out_v << solutions.sub(0)
+        out_v << solutions.sub(0)
         out_u << solutions.sub(1)
-
-        out_v = v
 
 
         if make_gif:
