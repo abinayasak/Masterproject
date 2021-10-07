@@ -121,10 +121,10 @@ def run_solver(make_gif, dimension):
 
     theta = 1.0  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
-    N = 40
+    N = 300
     Nx = 50
     Ny = 50
-    T = 10                         # [ms]
+    T = 400                         # [ms]
     dt = T / N                      # [ms]
     t = np.linspace(0, T, N+1)      # [ms]
 
@@ -154,9 +154,13 @@ def run_solver(make_gif, dimension):
     H = FunctionSpace(submesh, "CG", 1) # Heart
     W = MixedFunctionSpace(H,V)
 
+
     solutions = Function(W)
 
     f = Expression("5*exp(-(pow(x[0] - 0.5, 2) + pow(x[1] - 0.55, 2)) / 0.02)", degree=2)
+    #f = Expression('(pow(x[0] - 0.5, 2) + pow(x[1] - 0.55, 2)) <= pow(0.02, 2)', degree=2)
+    #f = Expression('x[0] <= 0.4 ? 0 : -85', degree=0)
+
     solutions.sub(0).assign(f)
 
 
