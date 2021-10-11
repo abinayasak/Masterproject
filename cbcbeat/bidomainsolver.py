@@ -89,6 +89,8 @@ class BasicBidomainSolver(object):
                  params=None):
 
         # Check some input
+        assert isinstance(submesh, Mesh), \
+            "Expecting submesh to be a Mesh instance, not %r" % cardiac_mesh
         assert isinstance(mesh, Mesh), \
             "Expecting mesh to be a Mesh instance, not %r" % mesh
         assert isinstance(time, Constant) or time is None, \
@@ -107,6 +109,18 @@ class BasicBidomainSolver(object):
         self._I_s = I_s
         self._I_a = I_a
 
+        mapping = self._submesh.topology().mapping()[self._mesh.id()]
+        cell_map = mapping.cell_map()
+        assert mapping and mapping.mesh().id() == self._mesh.id(), \
+            "The CardiacModel mesh should be built from TorsoModel mesh (MeshView)"
+
+        # Cells related to heart domain are marked with 1, other cells (torso) are marked with 0
+        self._heart_cells = MeshFunction("size_t", self._mesh, self._mesh.topology().dim(), 0)
+        for c in cells(self._submesh):
+            idx = int(cell_map[c.index()])
+            self._heart_cells[idx] = 1;
+
+
         # Initialize and update parameters if given
         self.parameters = self.default_parameters()
         if params is not None:
@@ -114,30 +128,32 @@ class BasicBidomainSolver(object):
 
         # Set-up function spaces
         k = self.parameters["polynomial_degree"]
-        Ve = FiniteElement("CG", self._mesh.ufl_cell(), k)
-        V = FunctionSpace(self._mesh, "CG", k)
-        Ue = FiniteElement("CG", self._submesh.ufl_cell(), k)
+
+        V = FunctionSpace(self._submesh, "CG", k)
         U = FunctionSpace(self._mesh, "CG", k)
+
 
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
-            Re = FiniteElement("R", self._mesh.ufl_cell(), 0)
             R = FunctionSpace(self._mesh, "R", 0)
-            self.VUR = FunctionSpace(mesh, MixedElement((Ve, Ue, Re)))
+            self.VUR = MixedFunctionSpace(V, U, R)
         else:
-            self.VUR = FunctionSpace(mesh, MixedElement((Ve, Ue)))
+            self.VUR = MixedFunctionSpace(V, U)
+
 
         self.V = V
 
         # Set-up solution fields:
         if v_ is None:
-            self.merger = FunctionAssigner(V, self.VUR.sub(0))
-            self.v_ = Function(V, name="v_")
+            self.merger = FunctionAssigner(V, self.VUR.sub_space(0))
+            self.v_ = Function(self.VUR.sub_space(0), name="v_")
+
         else:
             debug("Experimental: v_ shipped from elsewhere.")
             self.merger = None
             self.v_ = v_
-        self.vur = Function(self.VUR, name="vur")
+
+        self.vur = Function(self.VUR)
 
         # Figure out whether we should annotate or not
         self._annotate_kwargs = annotate_kwargs(self.parameters)
@@ -158,6 +174,7 @@ class BasicBidomainSolver(object):
         *Returns*
           (previous v, current vur) (:py:class:`tuple` of :py:class:`dolfin.Function`)
         """
+
         return (self.v_, self.vur)
 
     def solve(self, interval, dt=None):
@@ -249,42 +266,38 @@ class BasicBidomainSolver(object):
              (v, u) = TrialFunctions(self.VUR)
              (w, q) = TestFunctions(self.VUR)
 
-        Dt_v = (v - self.v_)/k_n
-        v_mid = theta*v + (1.0 - theta)*self.v_
 
         # Set time
         t = t0 + theta*(t1 - t0)
         self.time.assign(t)
 
-        # Define spatial integration domains:
-        (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
+        #(dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
 
-        theta_parabolic = (inner(M_i*grad(v_mid), grad(w))*dz()
-                           + inner(M_i*grad(u), grad(w))*dz())
-        theta_elliptic = (inner(M_i*grad(v_mid), grad(q))*dz()
-                          + inner((M_i + M_e)*grad(u), grad(q))*dz())
-        G = Dt_v*w*dz() + theta_parabolic + theta_elliptic
+        # Define spatial integration domains:
+        dV = Measure("dx", domain=self.VUR.sub_space(0).mesh())
+        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh())
+
+        a = v * w * dV \
+            + k_n * (inner(M_i * grad(v), grad(w)) * dV) \
+            + k_n * (inner(M_i * grad(u), grad(w)) * dV) \
+            + k_n * (inner(M_i * grad(v), grad(q)) * dV) \
+            + k_n * (inner((M_i + M_e) * grad(u), grad(q)) * dU) \
+            + k_n * (inner(0.25*M_e * grad(u), grad(q)) * dU)
+
+        L = self.v_ * w * dV + rhs
 
         if use_R:
-            G += (lamda*u + l*q)*dz()
+            a += (lamda*u + l*q)*dV
 
         # Add applied current as source in elliptic equation if
         # applicable
         if self._I_a:
-            G -= self._I_a*q*dz()
+            L += self._I_a*q*dV
 
-        # Add applied stimulus as source in parabolic equation if
-        # applicable
-        G -= rhs
+        L += rhs
 
-        # Define variational problem
-        a, L = system(G)
-        pde = LinearVariationalProblem(a, L, self.vur)
 
-        # Set-up solver
-        solver = LinearVariationalSolver(pde)
-        solver.parameters.update(self.parameters["linear_variational_solver"])
-        solver.solve()
+        solve(a == L, self.vur)
 
     @staticmethod
     def default_parameters():
@@ -304,7 +317,7 @@ class BasicBidomainSolver(object):
         params.add("polynomial_degree", 1)
         params.add("use_avg_u_constraint", True)
 
-        params.add(LinearVariationalSolver.default_parameters())
+        params.add(MixedLinearVariationalSolver.default_parameters())
         return params
 
 class BidomainSolver(BasicBidomainSolver):
@@ -326,105 +339,6 @@ class BidomainSolver(BasicBidomainSolver):
         # Mark the timestep as unset
         self._timestep = None
 
-    @property
-    def linear_solver(self):
-        """The linear solver (:py:class:`dolfin.LUSolver` or
-        :py:class:`dolfin.PETScKrylovSolver`)."""
-        return self._linear_solver
-
-    def _create_linear_solver(self):
-        "Helper function for creating linear solver based on parameters."
-        solver_type = self.parameters["linear_solver_type"]
-
-        if solver_type == "direct":
-            solver = LUSolver(self._lhs_matrix)
-            solver.parameters.update(self.parameters["lu_solver"])
-            update_routine = self._update_lu_solver
-
-        elif solver_type == "iterative":
-
-            # Initialize KrylovSolver with matrix
-            alg = self.parameters["algorithm"]
-            prec = self.parameters["preconditioner"]
-
-            debug("Creating PETSCKrylovSolver with %s and %s" % (alg, prec))
-            if prec == "fieldsplit":
-
-                # Argh. DOLFIN won't let you construct a PETScKrylovSolver with fieldsplit. Sigh ..
-                solver = PETScKrylovSolver()
-                # FIXME: work around DOLFIN bug #583. Just deleted this when fixed.
-                solver.parameters.update({"convergence_norm_type":
-                                          "preconditioned"})
-                #solver.parameters["preconditioner"]["structure"] = "same" # MER this should be set by user, and is below
-                solver.parameters.update(self.parameters["petsc_krylov_solver"])
-                solver.set_operator(self._lhs_matrix)
-
-                # Initialize the KSP directly:
-                ksp = solver.ksp()
-                ksp.setType(alg)
-                ksp.pc.setType(prec)
-                ksp.setOptionsPrefix("bidomain_") # it's really stupid, solver.set_options_prefix() doesn't work
-
-                # Set various options (by default) for the fieldsplit
-                # approach to solving the bidomain equations.
-
-                # FIXME: This needs a try
-                from petsc4py import PETSc
-
-                # Patrick believes that the fieldsplit index sets
-                # should already be set from the assembled matrix.
-
-                # Now let's set some default options for the solver.
-                opts = PETSc.Options("bidomain_")
-                if "pc_fieldsplit_type"    not in opts: opts["pc_fieldsplit_type"] = "symmetric_multiplicative"
-                if "fieldsplit_0_ksp_type" not in opts: opts["fieldsplit_0_ksp_type"] = "preonly"
-                if "fieldsplit_1_ksp_type" not in opts: opts["fieldsplit_1_ksp_type"] = "preonly"
-                if "fieldsplit_0_pc_type"  not in opts: opts["fieldsplit_0_pc_type"] = "hypre"
-                if "fieldsplit_1_pc_type"  not in opts: opts["fieldsplit_1_pc_type"] = "hypre"
-
-                ksp.setFromOptions()
-                ksp.setUp()
-
-            else:
-                solver = PETScKrylovSolver(alg, prec)
-                solver.set_operator(self._lhs_matrix)
-                # Still waiting for that bug fix:
-                solver.parameters.update({"convergence_norm_type":
-                                         "preconditioned"})
-                solver.parameters.update(self.parameters["petsc_krylov_solver"])
-
-            # Set nullspace if present. We happen to know that the
-            # transpose nullspace is the same as the nullspace (easy
-            # to prove from matrix structure).
-            if self.parameters["use_avg_u_constraint"]:
-                # Nothing to do, no null space
-                pass
-
-            else:
-                # If dolfin-adjoint is enabled and installled: set the solver nullspace
-                if dolfin_adjoint:
-                    solver.set_nullspace(self.nullspace)
-                    solver.set_transpose_nullspace(self.nullspace)
-                # Otherwise, set the nullspace in the operator
-                # directly.
-                else:
-                    A = as_backend_type(self._lhs_matrix)
-                    A.set_nullspace(self.nullspace)
-
-            update_routine = self._update_krylov_solver
-        else:
-            error("Unknown linear_solver_type given: %s" % solver_type)
-
-        return (solver, update_routine)
-
-    @property
-    def nullspace(self):
-        if self._nullspace_basis is None:
-            null_vector = Vector(self.vur.vector())
-            self.VUR.sub(1).dofmap().set(null_vector, 1.0)
-            null_vector *= 1.0/null_vector.norm("l2")
-            self._nullspace_basis = VectorSpaceBasis([null_vector])
-        return self._nullspace_basis
 
     @staticmethod
     def default_parameters():
@@ -493,50 +407,38 @@ class BidomainSolver(BasicBidomainSolver):
              (w, q) = TestFunctions(self.VUR)
 
 
-        #print(k_n)
-
-        # Set-up measure and rhs from stimulus
-        #if k_n >= 50 and k_n <= 60:
         (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
 
-        #rhs = I_s*w*dz()
 
-        dH = Measure("dx", domain=self.VUR.sub(0).mesh())
-        dV = Measure("dx", domain=self.VUR.sub(1).mesh())
+        dV = Measure("dx", domain=self.VUR.sub_space(0).mesh())
+        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh())
 
-        #print("dz:", dz)
-        #print("rhs:", rhs)
+
         # Set-up variational problem
         print("variational problems next..")
 
+        """G = (
+            v * w * dV
+            + theta * k_n * (dot(M_i * grad(v), grad(w)) * dV)
+            + k_n * (dot(M_i * grad(u), grad(w)) * dV)
+            + k_n * (dot(M_i * grad(v), grad(q)) * dU) #dV
+            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dU)
+            + (k_n/theta) * (dot(0.25*M_e * grad(u), grad(q)) * dU)
+            - (self.v_ * w * dV)
+            + (1 - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dV)
+            + ((1 - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dU) #dV
+            - rhs
+        )"""
 
-        """Dt_v_k_n = (v - self.v_)
-        v_mid = theta*v + (1.0 - theta)*self.v_
-        #theta_parabolic er med tidsderivert
-        theta_parabolic = (dot(M_i*grad(v_mid), grad(w))*dH
-                           + dot(M_i*grad(u), grad(w))*dH)
-        #theta_elliptic er uten tidsderivert
-        theta_elliptic = (dot(M_i*grad(v_mid), grad(q))*dV
-                          + dot((M_i + M_e)*grad(u), grad(q))*dV)
+        a = v * w * dV \
+            + k_n * (inner(M_i * grad(v), grad(w)) * dV) \
+            + k_n * (inner(M_i * grad(u), grad(w)) * dV) \
+            + k_n * (inner(M_i * grad(v), grad(q)) * dV) \
+            + k_n * (inner((M_i + M_e) * grad(u), grad(q)) * dU) \
+            + k_n * (inner(0.25*M_e * grad(u), grad(q)) * dU)
 
-        G = (Dt_v_k_n*w*dH + k_n*theta_parabolic + k_n*theta_elliptic
-             - k_n*rhs + (k_n/theta)*(dot(0.25*M_e * grad(u), grad(q)) * dV))"""
+        L = self.v_ * w * dV + rhs
 
-        G = (
-            v * w * dH
-            + theta * k_n * (dot(M_i * grad(v), grad(w)) * dH)
-            + k_n * (dot(M_i * grad(u), grad(w)) * dH)
-            + k_n * (dot(M_i * grad(v), grad(q)) * dV)
-            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dV)
-            + (k_n/theta) * (dot(0.25*M_e * grad(u), grad(q)) * dV)
-            - (self.v_ * w * dH)
-            + (1 - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dH)
-            + ((1 - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dV)
-            - k_n*rhs
-        )
-
-        #if k_n >= 50 and k_n <= 60:
-        #    G -= k_n*rhs
 
         if use_R:
             G += k_n*(lamda*u + l*q)*dz()
@@ -547,7 +449,6 @@ class BidomainSolver(BasicBidomainSolver):
             print("if self._I_a activated")
             G -= k_n*self._I_a*q*dz()
 
-        (a, L) = system(G)
         return (a, L)
 
     def step(self, interval):
@@ -564,8 +465,6 @@ class BidomainSolver(BasicBidomainSolver):
         """
 
         timer = Timer("PDE step")
-        solver_type = self.parameters["linear_solver_type"]
-        #print(solver_type)
 
         # Extract interval and thus time-step
         (t0, t1) = interval
@@ -576,81 +475,7 @@ class BidomainSolver(BasicBidomainSolver):
 
         # Update matrix and linear solvers etc as needed
         if self._timestep is None:
-            #print("timestep is None")
             self._timestep = Constant(dt)
-            (self._lhs, self._rhs) = self.variational_forms(self._timestep)
+        (self._lhs, self._rhs) = self.variational_forms(self._timestep)
 
-
-            # Preassemble left-hand side and initialize right-hand side vector
-            debug("Preassembling bidomain matrix (and initializing vector)")
-            self._lhs_matrix = assemble(self._lhs, **self._annotate_kwargs)
-            self._rhs_vector = Vector(self._mesh.mpi_comm(), self._lhs_matrix.size(0))
-            self._lhs_matrix.init_vector(self._rhs_vector, 0)
-
-            # Create linear solver (based on parameter choices)
-            self._linear_solver, self._update_solver = self._create_linear_solver()
-        else:
-            #print("timestep is else")
-            timestep_unchanged = (abs(dt - float(self._timestep)) < 1.e-12)
-            self._update_solver(timestep_unchanged, dt)
-
-        # Assemble right-hand-side
-        assemble_mixed(self._rhs, tensor=self._rhs_vector, **self._annotate_kwargs)
-
-        # Solve problem
-        self.linear_solver.solve(self.vur.vector(), self._rhs_vector,
-                                 **self._annotate_kwargs)
-
-
-
-    def _update_lu_solver(self, timestep_unchanged, dt):
-        """Helper function for updating an LUSolver depending on
-        whether timestep has changed."""
-
-        # Update reuse of factorization parameter in accordance with
-        # changes in timestep
-        if timestep_unchanged:
-            debug("Timestep is unchanged, reusing LU factorization")
-        else:
-            debug("Timestep has changed, updating LU factorization")
-            if dolfin_adjoint and self.parameters["enable_adjoint"]:
-                raise ValueError("dolfin-adjoint doesn't support changing timestep (yet)")
-
-            # Update stored timestep
-            # FIXME: dolfin_adjoint still can't annotate constant assignment.
-            self._timestep.assign(Constant(dt))#, annotate=annotate)
-
-            # Reassemble matrix
-            assemble(self._lhs, tensor=self._lhs_matrix,
-                     **self._annotate_kwargs)
-
-            (self._linear_solver, dummy) = self._create_linear_solver()
-
-
-
-    def _update_krylov_solver(self, timestep_unchanged, dt):
-        """Helper function for updating a KrylovSolver depending on
-        whether timestep has changed."""
-
-        # Update reuse of preconditioner parameter in accordance with
-        # changes in timestep
-        if timestep_unchanged:
-            debug("Timestep is unchanged, reusing preconditioner")
-        else:
-            debug("Timestep has changed, updating preconditioner")
-            if dolfin_adjoint and self.parameters["enable_adjoint"]:
-                raise ValueError("dolfin-adjoint doesn't support changing timestep (yet)")
-
-            # Update stored timestep
-            self._timestep.assign(Constant(dt))#, annotate=annotate)
-
-            # Reassemble matrix
-            assemble(self._lhs, tensor=self._lhs_matrix, **self._annotate_kwargs)
-
-            # Make new Krylov solver
-            (self._linear_solver, dummy) = self._create_linear_solver()
-
-        # Set nonzero initial guess if it indeed is nonzero
-        if (self.vur.vector().norm("l2") > 1.e-12):
-            debug("Initial guess is non-zero.")
-            self.linear_solver.parameters["nonzero_initial_guess"] = True
+        solve(self._lhs == self._rhs, self.vur)

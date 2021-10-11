@@ -134,17 +134,21 @@ class BasicSplittingSolver:
         (self.vs_, self.vs) = self.ode_solver.solution_fields()
         self.VS = self.vs.function_space()
 
+
         # Create PDE solver and extract solution fields
         self.pde_solver = self._create_pde_solver()
         (self.v_, self.vur) = self.pde_solver.solution_fields()
 
+
         # Create function assigner for merging v from self.vur into self.vs[0]
         if self.parameters["pde_solver"] == "bidomain":
-            V = self.vur.function_space().sub(0)
+            #V = self.vur.function_space().sub(0)
+            V = self.vur.sub(0)
+
         else:
             V = self.vur.function_space()
 
-        self.merger = FunctionAssigner(self.VS.sub(0), V)
+        #self.merger = FunctionAssigner(self.VS.sub(0), V)
 
         self._annotate_kwargs = annotate_kwargs(self.parameters)
 
@@ -262,6 +266,7 @@ class BasicSplittingSolver:
         *Returns*
           (previous vs, current vs, current vur) (:py:class:`tuple` of :py:class:`dolfin.Function`)
         """
+        #project(self.v_, self.vur.function_space().sub(0).collapse())
         return (self.vs_, self.vs, self.vur)
 
     def solve(self, interval, dt):
@@ -387,7 +392,7 @@ class BasicSplittingSolver:
             v = self.vur.sub(0)
         else:
             v = self.vur
-        self.merger.assign(solution.sub(0), v, **self._annotate_kwargs)
+        #self.merger.assign(solution.sub(0), v, **self._annotate_kwargs)
         end()
 
         timer.stop()
@@ -557,14 +562,11 @@ class SplittingSolver(BasicSplittingSolver):
         (M_i, M_e) = self._model.conductivities()
 
         if self.parameters["pde_solver"] == "bidomain":
-            #print('inside _create_pde_solver, pde_solver, bidomain')
             PDESolver = BidomainSolver
             params = self.parameters["BidomainSolver"]
             args = (self._domain, self._subdomain, self._time, M_i, M_e)
-            #print(stimulus)
             kwargs = dict(I_s=stimulus, I_a=applied_current,
                           v_=self.vs[0], params=params)
-            # where is this I_s used?
 
         else:
             PDESolver = MonodomainSolver
