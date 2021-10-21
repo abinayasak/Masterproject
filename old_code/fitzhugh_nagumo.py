@@ -12,12 +12,15 @@ def dvdt(v, t):
 
 
 def fitzhugh_nagumo(v, t):
-    a = 0.13; b = 0.013            # Constant
-    c1 = 0.26; c2 = 0.1; c3 = 1.0  # Constant
-    i_app = 0.                     # Constant
+    a = 0.13; b = 0.013              # Constant
+    c1 = 0.26; c2 = 0.1; c3 = 1.0    # Constant
+    i_app = 0.05                     # Constant
 
-    dvdt = c1*v[0]*(v[0] - a)*(1 - v[0]) - c2*v[1]
+    dvdt = c1*v[0]*(v[0] - a)*(1 - v[0])
     dwdt = b*(v[0] - c3*v[1])
+
+    dvdt += - c2*v[0]*v[1]   # Modified FHN
+    #dvdt += - c2*v[1]       # Original FHN
 
     if t >= 50 and t <= 60:
         dvdt += i_app
@@ -25,9 +28,9 @@ def fitzhugh_nagumo(v, t):
     return dvdt, dwdt
 
 def fitzhugh_nagumo_reparameterized(v, t):
-    a = 0.13; b = 0.013            # Constant
-    c1 = 0.26; c2 = 0.1; c3 = 1.0  # Constant
-    i_app = 0.                     # Constant
+    a = 0.13; b = 0.013              # Constant
+    c1 = 0.26; c2 = 0.1; c3 = 1.0    # Constant
+    i_app = 0.05                     # Constant
 
     v_rest = -85.            # [mV]
     v_peak = 40.             # [mV]
@@ -43,29 +46,6 @@ def fitzhugh_nagumo_reparameterized(v, t):
         dVdt += I_app
 
     return dVdt, dWdt
-
-
-def set_initial_condition(V, mesh):
-
-    u0 = []
-    element = V.element()
-    for cell in cells(mesh):
-        for i in range(element.tabulate_dof_coordinates(cell).size):
-            # Discarding nodes that appears several time. Putting x coordinates into list u0
-            if element.tabulate_dof_coordinates(cell)[i, 0] in u0:
-                None
-            else:
-                u0.append(element.tabulate_dof_coordinates(cell)[i, 0])
-
-    u0 = np.array(sorted(u0))  # Sorting the x coordinates as well as making u0 an array
-    np.save("x0", u0)
-    #u0[u0 < 2] = 0.  # if x < 2 mm, set u0 = 0.
-    #u0[u0 >= 2] = -85.  # if x >= 2 mm, set u0 = -85.
-
-    #w0 = np.zeros(len(u0))
-
-    #return u0, w0
-
 
 
 def monodomain_model(V, theta, u, v, u_n, dt):
@@ -102,27 +82,29 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
     u = TrialFunction(V)
     v = TestFunction(V)
 
+    u0 = np.array(u0)
+    w0 = np.array(w0)
+
     # Step one
-    v_values = np.zeros(Nx + 1)
-    w_values = np.zeros(Nx + 1)
+    v_values = np.zeros(len(u0))
+    w_values = np.zeros(len(u0))
 
     t = np.array([tn, tn + theta * dt])
-    for i in range(Nx + 1):
+    for i in range(len(u0)):
         v_values[i], w_values[i] = odeint(derivative, [u0[i], w0[i]], t)[-1]
 
     u_n = Function(V)
     u_n.vector()[:] = v_values
 
-
     # Step two
-    u = monodomain_model(V, theta, u, v, u_n, dt)
-
+    #u = monodomain_model(V, theta, u, v, u_n, dt)
 
     # Step three
     if theta == 0.5:
         new_v_values= np.zeros(Nx + 1)
         new_w_values = np.zeros(Nx + 1)
 
+        #u_n = u.vector()[:]
         u_n = u.vector()[:]
         t = np.array([tn + theta * dt, tn + dt])
         for i in range(Nx + 1):
@@ -133,36 +115,49 @@ def step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative):
         u = u_new
 
 
-    return u, w_values
-    #return v_values, w_values
+    return u_n, w_values
+
 
 
 def run_solver(make_gif):
 
     theta = 1  # =0.5 Strang/CN and N must be large, =1 Godunov/BE
     degree = 1
-    N = 200
-    Nx = 200
+    N = 400
+    Nx = 600
     Ny = None
-    T = 200.0                       # [ms]
+    T = 400.0                       # [ms]
     dt = T / N                      # [ms]
     t = np.linspace(0, T, N+1)      # [ms]
 
     mesh = IntervalMesh(Nx, 0, 20)  # [mm]
     V = FunctionSpace(mesh, "P", degree)
-    u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
-    u_n = interpolate(u0, V)
+    #u0 = Expression('x[0] <= 2.0 ? 0 : -85', degree=0)
+    #u0 = Expression('x[0] <= 2.0 ? -85 : -85', degree=0) # For plotting Reparameterized FHN
+    u0 = Expression('x[0] <= 2.0 ? 0 : 0', degree=0)      # For plotting Original/Modified FHN
+    u0 = interpolate(u0, V)
 
-    u0 = u_n.vector()[:]
-    u0 = u0[::-1]
+    u0 = u0.vector()[:]
     w0 = np.zeros(len(u0))
 
-    set_initial_condition(V, mesh)
-    derivative = fitzhugh_nagumo_reparameterized
+    x0 = Expression('x[0]', degree=0)
+    x0 = interpolate(x0, V)
+    np.save("x0", x0.vector()[:])
+
+
+    derivative = fitzhugh_nagumo#_reparameterized
+
+    v_list = []
+    w_list = []
+    t_list = []
 
     tn = 0
     count = 0
     skip_frames = 10
+
+    v_list.append(u0[-1])
+    w_list.append(w0[-1])
+    t_list.append(tn)
     for i in range(N + 1):
         print("tn: %0.4f / %0.4f" % (tn, T))
         u, w = step(V, T, N, dt, tn, Nx, Ny, degree, u0, w0, theta, derivative)
@@ -170,20 +165,32 @@ def run_solver(make_gif):
         u0 = u.vector()[:]
         w0 = w
 
+        v_list.append(u0[-1])
+        w_list.append(w[-1])
+        t_list.append(tn)
+
+
         if make_gif:
             if i == count:
                 # Create and save every skip_frames'th plots to file
                 plt.clf()
-                plt.plot(np.load("x0.npy"), u.vector()[:], label="v")
+                #plt.plot(np.load("x0.npy"), u.vector()[:], label="v")
+                plt.plot(np.load("x0.npy"), u0, label="v")
                 plt.plot(np.load("x0.npy"), w, label="w")
+                #plt.plot(t, u0, label="v")
+                #plt.plot(t, w, label="w")
                 plt.axis([0, 20, -100, 100])
-                plt.xlabel("[mm]")
-                plt.ylabel("[mV]")
+                #plt.xlabel("[mm]")
+                #plt.ylabel("[mV]")
                 plt.legend()
                 plt.title("i=%d" % i)
                 plt.savefig(f"plots/u{i:04d}.png")
 
                 count += skip_frames
+
+    np.save("v", v_list)
+    np.save("w", w_list)
+    np.save("t", t_list)
 
 
     if make_gif:
@@ -211,4 +218,4 @@ def run_solver(make_gif):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True)
+    run_solver(make_gif=False)
