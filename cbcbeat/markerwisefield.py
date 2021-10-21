@@ -11,7 +11,7 @@ def handle_markerwise(g, classtype):
     if (g is None \
         or isinstance(g, classtype) \
         or isinstance(g, Markerwise) \
-        or isinstance(g, object)):
+        or isinstance(g, object)): ## HAHAHA
         return g
     else:
         msg = "Expecting stimulus to be a %s or Markerwise, not %r " \
@@ -20,19 +20,15 @@ def handle_markerwise(g, classtype):
 
 def rhs_with_markerwise_field(g, mesh, v):
     if g is None:
-        #print('inside rhs_with_markerwise_field if option')
         dz = dx
         rhs = 0.0
     elif isinstance(g, Markerwise):
-        #print('inside rhs_with_markerwise_field elif option')
         markers = g.markers()
         dz = Measure("dx", domain=markers.mesh(), subdomain_data=markers)
         rhs = sum([g*v*dz(i) for (i, g) in zip(g.keys(), g.values())])
     else:
-        #print('inside rhs_with_markerwise_field else option')
         dz = dx
         rhs = g*v*dz()
-
     return (dz, rhs)
 
 class Markerwise(object):

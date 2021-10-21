@@ -54,14 +54,14 @@ class CardiacModel(object):
         an applied current as an ufl Expression
 
     """
-    def __init__(self, subdomain, domain, time, M_i, M_e, cell_models,
+    def __init__(self, domain, subdomain, time, M_i, M_e, cell_models,
                  stimulus=None, applied_current=None):
         "Create CardiacModel from given input."
 
-        self._handle_input(subdomain, domain, time, M_i, M_e, cell_models,
+        self._handle_input(domain, subdomain, time, M_i, M_e, cell_models,
                            stimulus, applied_current)
 
-    def _handle_input(self, subdomain, domain, time, M_i, M_e, cell_models,
+    def _handle_input(self, domain, subdomain, time, M_i, M_e, cell_models,
                       stimulus=None, applied_current=None):
 
         # Check input and store attributes
@@ -99,8 +99,6 @@ class CardiacModel(object):
 
     def stimulus(self):
         "A stimulus: used as a source in the parabolic bidomain equation"
-        #print('inside stimulus', self._stimulus)
-
         return self._stimulus
 
     def conductivities(self):
@@ -125,13 +123,13 @@ class CardiacModel(object):
         "The current time (:py:class:`dolfin.Constant` or None)."
         return self._time
 
-    def subdomain(self):
-        "The spatial subdomain (:py:class:`dolfin.Mesh`)."
-        return self._subdomain
-
     def domain(self):
         "The spatial domain (:py:class:`dolfin.Mesh`)."
         return self._domain
+
+    def subdomain(self):
+        "The spatial domain (:py:class:`dolfin.Mesh`)."
+        return self._subdomain
 
     def cell_models(self):
         "Return the cell models"

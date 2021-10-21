@@ -42,7 +42,6 @@ class BasicBidomainSolver(object):
     """This solver is based on a theta-scheme discretization in time
     and CG_1 x CG_1 (x R) elements in space.
 
-
     .. note::
 
        For the sake of simplicity and consistency with other solver
@@ -89,16 +88,17 @@ class BasicBidomainSolver(object):
                  params=None):
 
         # Check some input
-        assert isinstance(submesh, Mesh), \
-            "Expecting submesh to be a Mesh instance, not %r" % cardiac_mesh
         assert isinstance(mesh, Mesh), \
             "Expecting mesh to be a Mesh instance, not %r" % mesh
+        assert isinstance(submesh, Mesh), \
+            "Expecting submesh to be a Mesh instance, not %r" % submesh
         assert isinstance(time, Constant) or time is None, \
             "Expecting time to be a Constant instance (or None)."
         assert isinstance(params, Parameters) or params is None, \
             "Expecting params to be a Parameters instance (or None)"
 
         self._nullspace_basis = None
+
 
         # Store input
         self._mesh = mesh
@@ -108,18 +108,6 @@ class BasicBidomainSolver(object):
         self._M_e = M_e
         self._I_s = I_s
         self._I_a = I_a
-
-        mapping = self._submesh.topology().mapping()[self._mesh.id()]
-        cell_map = mapping.cell_map()
-        assert mapping and mapping.mesh().id() == self._mesh.id(), \
-            "The CardiacModel mesh should be built from TorsoModel mesh (MeshView)"
-
-        # Cells related to heart domain are marked with 1, other cells (torso) are marked with 0
-        self._heart_cells = MeshFunction("size_t", self._mesh, self._mesh.topology().dim(), 0)
-        for c in cells(self._submesh):
-            idx = int(cell_map[c.index()])
-            self._heart_cells[idx] = 1;
-
 
         # Initialize and update parameters if given
         self.parameters = self.default_parameters()
@@ -132,7 +120,6 @@ class BasicBidomainSolver(object):
         V = FunctionSpace(self._submesh, "CG", k)
         U = FunctionSpace(self._mesh, "CG", k)
 
-
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
             R = FunctionSpace(self._mesh, "R", 0)
@@ -140,14 +127,12 @@ class BasicBidomainSolver(object):
         else:
             self.VUR = MixedFunctionSpace(V, U)
 
-
         self.V = V
 
         # Set-up solution fields:
         if v_ is None:
             self.merger = FunctionAssigner(V, self.VUR.sub_space(0))
             self.v_ = Function(self.VUR.sub_space(0), name="v_")
-
         else:
             debug("Experimental: v_ shipped from elsewhere.")
             self.merger = None
@@ -157,6 +142,10 @@ class BasicBidomainSolver(object):
 
         # Figure out whether we should annotate or not
         self._annotate_kwargs = annotate_kwargs(self.parameters)
+
+    def function_space(self):
+        "Return the MixedFunctionSpace"
+        return self.VUR
 
     @property
     def time(self):
@@ -266,38 +255,42 @@ class BasicBidomainSolver(object):
              (v, u) = TrialFunctions(self.VUR)
              (w, q) = TestFunctions(self.VUR)
 
+        Dt_v = (v - self.v_)/k_n
+        v_mid = theta*v + (1.0 - theta)*self.v_
 
         # Set time
         t = t0 + theta*(t1 - t0)
         self.time.assign(t)
 
-        #(dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
-
         # Define spatial integration domains:
-        dV = Measure("dx", domain=self.VUR.sub_space(0).mesh())
-        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh())
+        (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
 
-        a = v * w * dV \
-            + k_n * (inner(M_i * grad(v), grad(w)) * dV) \
-            + k_n * (inner(M_i * grad(u), grad(w)) * dV) \
-            + k_n * (inner(M_i * grad(v), grad(q)) * dV) \
-            + k_n * (inner((M_i + M_e) * grad(u), grad(q)) * dU) \
-            + k_n * (inner(0.25*M_e * grad(u), grad(q)) * dU)
-
-        L = self.v_ * w * dV + rhs
+        theta_parabolic = (inner(M_i*grad(v_mid), grad(w))*dz()
+                           + inner(M_i*grad(u), grad(w))*dz())
+        theta_elliptic = (inner(M_i*grad(v_mid), grad(q))*dz()
+                          + inner((M_i + M_e)*grad(u), grad(q))*dz())
+        G = Dt_v*w*dz() + theta_parabolic + theta_elliptic
 
         if use_R:
-            a += (lamda*u + l*q)*dV
+            G += (lamda*u + l*q)*dz()
 
         # Add applied current as source in elliptic equation if
         # applicable
         if self._I_a:
-            L += self._I_a*q*dV
+            G -= self._I_a*q*dz()
 
-        L += rhs
+        # Add applied stimulus as source in parabolic equation if
+        # applicable
+        G -= rhs
 
+        # Define variational problem
+        a, L = system(G)
+        pde = LinearVariationalProblem(a, L, self.vur)
 
-        solve(a == L, self.vur)
+        # Set-up solver
+        solver = LinearVariationalSolver(pde)
+        solver.parameters.update(self.parameters["linear_variational_solver"])
+        solver.solve()
 
     @staticmethod
     def default_parameters():
@@ -317,7 +310,7 @@ class BasicBidomainSolver(object):
         params.add("polynomial_degree", 1)
         params.add("use_avg_u_constraint", True)
 
-        params.add(MixedLinearVariationalSolver.default_parameters())
+        params.add(LinearVariationalSolver.default_parameters())
         return params
 
 class BidomainSolver(BasicBidomainSolver):
@@ -398,7 +391,6 @@ class BidomainSolver(BasicBidomainSolver):
 
         # Define variational formulation
         use_R = self.parameters["use_avg_u_constraint"]
-        #print("use_R:", use_R)
         if use_R:
              (v, u, l) = TrialFunctions(self.VUR)
              (w, q, lamda) = TestFunctions(self.VUR)
@@ -406,50 +398,35 @@ class BidomainSolver(BasicBidomainSolver):
              (v, u) = TrialFunctions(self.VUR)
              (w, q) = TestFunctions(self.VUR)
 
-
+        # Set-up measure and rhs from stimulus
         (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._mesh, w)
 
-
+        # Set up integration domain
         dV = Measure("dx", domain=self.VUR.sub_space(0).mesh())
         dU = Measure("dx", domain=self.VUR.sub_space(1).mesh())
 
-
         # Set-up variational problem
-        print("variational problems next..")
-
-        """G = (
-            v * w * dV
-            + theta * k_n * (dot(M_i * grad(v), grad(w)) * dV)
-            + k_n * (dot(M_i * grad(u), grad(w)) * dV)
-            + k_n * (dot(M_i * grad(v), grad(q)) * dU) #dV
-            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dU)
-            + (k_n/theta) * (dot(0.25*M_e * grad(u), grad(q)) * dU)
-            - (self.v_ * w * dV)
-            + (1 - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dV)
-            + ((1 - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dU) #dV
-            - rhs
-        )"""
-
         a = v * w * dV \
-            + k_n * (inner(M_i * grad(v), grad(w)) * dV) \
-            + k_n * (inner(M_i * grad(u), grad(w)) * dV) \
-            + k_n * (inner(M_i * grad(v), grad(q)) * dV) \
-            + k_n * (inner((M_i + M_e) * grad(u), grad(q)) * dU) \
-            + k_n * (inner(0.25*M_e * grad(u), grad(q)) * dU)
+            + theta * k_n * (dot(M_i * grad(v), grad(w)) * dV) \
+            + k_n * (dot(M_i * grad(u), grad(w)) * dV) \
+            + k_n * (dot(M_i * grad(v), grad(q)) * dV) \
+            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dU) \
+            + (k_n/theta) * (dot((0.25*M_e) * grad(u), grad(q)) * dU)
 
-        L = self.v_ * w * dV + rhs
+        L = (self.v_ * w * dV) \
+            - (1. - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dV) \
+            - ((1. - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dV) \
+            + rhs
 
 
         if use_R:
-            G += k_n*(lamda*u + l*q)*dz()
+            a += k_n*(lamda*u + l*q)*dV
 
-        # Add applied current as source in elliptic equation if
-        # applicable
         if self._I_a:
-            print("if self._I_a activated")
-            G -= k_n*self._I_a*q*dz()
+            L += k_n*self._I_a*q*dV
 
         return (a, L)
+
 
     def step(self, interval):
         """
@@ -465,6 +442,7 @@ class BidomainSolver(BasicBidomainSolver):
         """
 
         timer = Timer("PDE step")
+        solver_type = self.parameters["linear_solver_type"]
 
         # Extract interval and thus time-step
         (t0, t1) = interval
@@ -476,6 +454,6 @@ class BidomainSolver(BasicBidomainSolver):
         # Update matrix and linear solvers etc as needed
         if self._timestep is None:
             self._timestep = Constant(dt)
-        (self._lhs, self._rhs) = self.variational_forms(self._timestep)
 
+        (self._lhs, self._rhs) = self.variational_forms(self._timestep)
         solve(self._lhs == self._rhs, self.vur)

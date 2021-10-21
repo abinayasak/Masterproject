@@ -125,8 +125,8 @@ class BasicSplittingSolver:
             self.parameters.update(params)
 
         # Extract solution domain
-        self._subdomain = self._model.subdomain()
         self._domain = self._model.domain()
+        self._subdomain = self._model.subdomain()
         self._time = self._model.time()
 
         # Create ODE solver and extract solution fields
@@ -138,19 +138,17 @@ class BasicSplittingSolver:
         # Create PDE solver and extract solution fields
         self.pde_solver = self._create_pde_solver()
         (self.v_, self.vur) = self.pde_solver.solution_fields()
-
+        (self.VUR) = self.pde_solver.function_space()
 
         # Create function assigner for merging v from self.vur into self.vs[0]
         if self.parameters["pde_solver"] == "bidomain":
-            #V = self.vur.function_space().sub(0)
-            V = self.vur.sub(0)
-
+            V = self.VUR.sub_space(0)
         else:
-            V = self.vur.function_space()
+            V = self.vur
 
-        #self.merger = FunctionAssigner(self.VS.sub(0), V)
-
+        self.merger = FunctionAssigner(self.VS.sub(0), V)
         self._annotate_kwargs = annotate_kwargs(self.parameters)
+
 
     def _create_ode_solver(self):
         """Helper function to initialize a suitable ODE solver from
@@ -171,7 +169,7 @@ class BasicSplittingSolver:
         if params.has_parameter("enable_adjoint"):
             params["enable_adjoint"] = self.parameters["enable_adjoint"]
 
-        solver = BasicCardiacODESolver(self._domain, self._time, cell_model,
+        solver = BasicCardiacODESolver(self._subdomain, self._time, cell_model,
                                        I_s=stimulus,
                                        params=params)
         return solver
@@ -194,17 +192,14 @@ class BasicSplittingSolver:
         # Extract conductivities from the cardiac model
         (M_i, M_e) = self._model.conductivities()
 
-        if self.parameters["pde_solver"] == "bidomain":
-            PDESolver = BasicBidomainSolver
-            params = self.parameters["BasicBidomainSolver"]
-            args = (self._domain, self._time, M_i, M_e)
-            kwargs = dict(I_s=stimulus, I_a=applied_current,
-                          v_=self.vs[0], params=params)
-        else:
-            PDESolver = BasicMonodomainSolver
-            params = self.parameters["BasicMonodomainSolver"]
-            args = (self._domain, self._time, M_i)
-            kwargs = dict(I_s=stimulus, v_=self.vs[0], params=params)
+        assert self.parameters["pde_solver"] == "bidomain",\
+            "Coupling heart/torso is only available with bidomain model"
+
+        PDESolver = CoupledBasicBidomainSolver
+        params = self.parameters["CoupledBasicBidomainSolver"]
+        args = (self._domain, self._subdomain, self._time, M_i, M_e, M_T)
+        kwargs = dict(I_s=stimulus, I_a=applied_current,
+                      v_=self.vs[0], params=params)
 
         # Propagate enable_adjoint to Bidomain solver
         if params.has_parameter("enable_adjoint"):
@@ -266,7 +261,6 @@ class BasicSplittingSolver:
         *Returns*
           (previous vs, current vs, current vur) (:py:class:`tuple` of :py:class:`dolfin.Function`)
         """
-        #project(self.v_, self.vur.function_space().sub(0).collapse())
         return (self.vs_, self.vs, self.vur)
 
     def solve(self, interval, dt):
@@ -352,11 +346,14 @@ class BasicSplittingSolver:
 
         # If first order splitting, we need to ensure that self.vs is
         # up to date, but otherwise we are done.
+        #print(' vs[0][0]:', self.vs.sub(0).vector()[0])
+        #print('vur[0][0]:', self.vur.sub(0).vector()[0])
         if theta == 1.0:
             # Assumes that the v part of its vur and the s part of its
             # vs are in the correct state, provides input argument(in
             # this case self.vs) in its correct state
             self.merge(self.vs)
+            #print(' vs[0][0]:', self.vs.sub(0).vector()[0])
             return
 
         # Otherwise, we do another ode_step:
@@ -392,8 +389,11 @@ class BasicSplittingSolver:
             v = self.vur.sub(0)
         else:
             v = self.vur
-        #self.merger.assign(solution.sub(0), v, **self._annotate_kwargs)
+
+        self.merger.assign(solution.sub(0), v, **self._annotate_kwargs)
+
         end()
+
 
         timer.stop()
 
@@ -538,7 +538,7 @@ class SplittingSolver(BasicSplittingSolver):
         params = self.parameters[Solver.__name__]
         if params.has_parameter("enable_adjoint"):
             params["enable_adjoint"] = self.parameters["enable_adjoint"]
-        solver = Solver(self._domain, self._time, cell_model,
+        solver = Solver(self._subdomain, self._time, cell_model,
                         I_s=stimulus,
                         params=params)
 
@@ -567,7 +567,6 @@ class SplittingSolver(BasicSplittingSolver):
             args = (self._domain, self._subdomain, self._time, M_i, M_e)
             kwargs = dict(I_s=stimulus, I_a=applied_current,
                           v_=self.vs[0], params=params)
-
         else:
             PDESolver = MonodomainSolver
             params = self.parameters["MonodomainSolver"]

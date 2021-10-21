@@ -120,8 +120,10 @@ class BasicCardiacODESolver(object):
         else:
             V = FunctionSpace(self._mesh, v_family, v_degree)
             S = state_space(self._mesh, self._num_states, s_family, s_degree)
-            Mx = MixedElement(V.ufl_element(), S.ufl_element())
-            self.VS = FunctionSpace(self._mesh, Mx)
+            #Mx = MixedElement(V.ufl_element(), S.ufl_element())
+            #self.VS = FunctionSpace(self._mesh, Mx)
+            self.VS = MixedFunctionSpace(V, S)
+
 
         # Initialize solution fields
         self.vs_ = Function(self.VS, name="vs_")
@@ -366,7 +368,6 @@ class CardiacODESolver(object):
     def __init__(self, mesh, time, model, I_s=None, params=None):
 
         import ufl.classes
-
         # Store input
         self._mesh = mesh
         self._time = time
