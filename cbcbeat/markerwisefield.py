@@ -24,7 +24,7 @@ def rhs_with_markerwise_field(g, mesh, v):
         rhs = 0.0
     elif isinstance(g, Markerwise):
         markers = g.markers()
-        dz = Measure("dx", domain=markers.mesh(), subdomain_data=markers)
+        dz = Measure("dx", domain=mesh, subdomain_data=markers)
         rhs = sum([g*v*dz(i) for (i, g) in zip(g.keys(), g.values())])
     else:
         dz = dx
