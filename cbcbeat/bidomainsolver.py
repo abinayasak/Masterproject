@@ -396,11 +396,11 @@ class BidomainSolver(BasicBidomainSolver):
         # Define variational formulation
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
-             (v, u, l) = TrialFunctions(self.VUR)
-             (w, q, lamda) = TestFunctions(self.VUR)
+             (v, u, a, l) = TrialFunctions(self.VUR)
+             (w, q, b, lamda) = TestFunctions(self.VUR)
         else:
-             (v, u, l) = TrialFunctions(self.VUR)
-             (w, q, lamda) = TestFunctions(self.VUR)
+            (v, u, a) = TrialFunctions(self.VUR)
+            (w, q, b) = TestFunctions(self.VUR)
 
         # Set-up measure and rhs from stimulus
         (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._heart_mesh, w)
@@ -416,7 +416,7 @@ class BidomainSolver(BasicBidomainSolver):
             + k_n * (dot(M_i * grad(u), grad(w)) * dV) \
             + k_n * (dot(M_i * grad(v), grad(q)) * dV) \
             + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dV) \
-            + (k_n/theta) * (dot((M_T) * grad(u), grad(lamda)) * dT)
+            + (k_n/theta) * (dot((M_T) * grad(u), grad(q)) * dT)
 
         L = (self.v_ * w * dV) \
             - (1. - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dV) \
