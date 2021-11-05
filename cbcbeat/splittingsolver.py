@@ -127,7 +127,6 @@ class BasicSplittingSolver:
         # Extract solution domains
         self._domain = self._model.domain()
         self._heart_mesh = self._model.heart_mesh()
-        self._torso_mesh = self._model.torso_mesh()
         self._time = self._model.time()
 
         # Create ODE solver and extract solution fields
@@ -195,7 +194,7 @@ class BasicSplittingSolver:
 
         PDESolver = BasicBidomainSolver
         params = self.parameters["BasicBidomainSolver"]
-        args = (self._domain, self._heart_mesh, self._torso_mesh, self._time, M_i, M_e, M_T)
+        args = (self._domain, self._heart_mesh, self._time, M_i, M_e, M_T)
         kwargs = dict(I_s=stimulus, I_a=applied_current,
                       v_=self.vs[0], params=params)
 
@@ -548,12 +547,13 @@ class SplittingSolver(BasicSplittingSolver):
         # Extract conductivities from the cardiac model
         (M_i, M_e, M_T) = self._model.conductivities()
 
+
         assert self.parameters["pde_solver"] == "bidomain",\
             "Coupling heart and torso is only available with bidomain model"
 
         PDESolver = BidomainSolver
         params = self.parameters["BidomainSolver"]
-        args = (self._domain, self._heart_mesh, self._torso_mesh, self._time, M_i, M_e, M_T)
+        args = (self._domain, self._heart_mesh, self._time, M_i, M_e, M_T)
         kwargs = dict(I_s=stimulus, I_a=applied_current,
                           v_=self.vs[0], params=params)
 

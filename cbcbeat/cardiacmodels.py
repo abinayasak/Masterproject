@@ -54,24 +54,20 @@ class CardiacModel(object):
         an applied current as an ufl Expression
 
     """
-    def __init__(self, domain, heart_mesh, torso_mesh, time, M_i, M_e, M_T, cell_models,
+    def __init__(self, domain, heart_mesh, time, M_i, M_e, M_T, cell_models,
                  stimulus=None, applied_current=None):
         "Create CardiacModel from given input."
 
-        self._handle_input(domain, heart_mesh, torso_mesh, time, M_i, M_e, M_T, cell_models,
+        self._handle_input(domain, heart_mesh, time, M_i, M_e, M_T, cell_models,
                            stimulus, applied_current)
 
-    def _handle_input(self, domain, heart_mesh, torso_mesh, time, M_i, M_e, M_T, cell_models,
+    def _handle_input(self, domain, heart_mesh, time, M_i, M_e, M_T, cell_models,
                       stimulus=None, applied_current=None):
 
         # Check input and store attributes
         msg = "Expecting domain to be a Mesh instance, not %r" % heart_mesh
         assert isinstance(heart_mesh, Mesh), msg
         self._heart_mesh = heart_mesh
-
-        msg = "Expecting domain to be a Mesh instance, not %r" % torso_mesh
-        assert isinstance(torso_mesh, Mesh), msg
-        self._torso_mesh = torso_mesh
 
         msg = "Expecting domain to be a Mesh instance, not %r" % domain
         assert isinstance(domain, Mesh), msg
@@ -140,10 +136,6 @@ class CardiacModel(object):
     def heart_mesh(self):
         "The spatial domain (:py:class:`dolfin.Mesh`)."
         return self._heart_mesh
-
-    def torso_mesh(self):
-        "The spatial domain (:py:class:`dolfin.Mesh`)."
-        return self._torso_mesh
 
     def cell_models(self):
         "Return the cell models"

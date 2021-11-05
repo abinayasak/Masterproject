@@ -84,7 +84,7 @@ class BasicBidomainSolver(object):
         Solver parameters
 
       """
-    def __init__(self, mesh, heart_mesh, torso_mesh, time, M_i, M_e, M_T, I_s=None, I_a=None, v_=None,
+    def __init__(self, mesh, heart_mesh, time, M_i, M_e, M_T, I_s=None, I_a=None, v_=None,
                  params=None):
 
         # Check some input
@@ -92,8 +92,6 @@ class BasicBidomainSolver(object):
             "Expecting mesh to be a Mesh instance, not %r" % mesh
         assert isinstance(heart_mesh, Mesh), \
             "Expecting heart_mesh to be a Mesh instance, not %r" % heart_mesh
-        assert isinstance(torso_mesh, Mesh), \
-            "Expecting torso_mesh to be a Mesh instance, not %r" % torso_mesh
         assert isinstance(time, Constant) or time is None, \
             "Expecting time to be a Constant instance (or None)."
         assert isinstance(params, Parameters) or params is None, \
@@ -105,13 +103,23 @@ class BasicBidomainSolver(object):
         # Store input
         self._mesh = mesh
         self._heart_mesh = heart_mesh
-        self._torso_mesh = torso_mesh
         self._time = time
         self._M_i = M_i
         self._M_e = M_e
         self._M_T = M_T
         self._I_s = I_s
         self._I_a = I_a
+
+        # Check if the heart mesh is a submesh of the whole mesh
+        mapping = self._heart_mesh.topology().mapping()[self._mesh.id()]
+        cell_map = mapping.cell_map()
+
+        # Cells related to heart domain are marked with 1, other cells (torso) are marked with 0
+        self._heart_cells = MeshFunction("size_t", self._mesh, self._mesh.topology().dim(), 0)
+        for c in cells(self._heart_mesh):
+            idx = int(cell_map[c.index()])
+            self._heart_cells[idx] = 1;
+
 
         # Initialize and update parameters if given
         self.parameters = self.default_parameters()
@@ -123,14 +131,13 @@ class BasicBidomainSolver(object):
 
         V = FunctionSpace(self._heart_mesh, "CG", k)
         U = FunctionSpace(self._mesh, "CG", k)
-        T = FunctionSpace(self._torso_mesh, "CG", k)
 
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
             R = FunctionSpace(self._mesh, "R", 0)
-            self.VUR = MixedFunctionSpace(V, U, T, R)
+            self.VUR = MixedFunctionSpace(V, U, R)
         else:
-            self.VUR = MixedFunctionSpace(V, U, T)
+            self.VUR = MixedFunctionSpace(V, U)
 
         self.V = V
 
@@ -249,7 +256,9 @@ class BasicBidomainSolver(object):
         theta = self.parameters["theta"]
 
         # Extract conductivities
-        M_i, M_e = self._M_i, self._M_e
+        M_i = self._M_i
+        M_e = self._M_e
+        M_T = self._M_T
 
         # Define variational formulation
         use_R = self.parameters["use_avg_u_constraint"]
@@ -257,8 +266,8 @@ class BasicBidomainSolver(object):
              (v, u, l) = TrialFunctions(self.VUR)
              (w, q, lamda) = TestFunctions(self.VUR)
         else:
-             (v, u, l) = TrialFunctions(self.VUR)
-             (w, q, lamda) = TestFunctions(self.VUR)
+             (v, u) = TrialFunctions(self.VUR)
+             (w, q) = TestFunctions(self.VUR)
 
         # Set time
         t = t0 + theta*(t1 - t0)
@@ -269,21 +278,21 @@ class BasicBidomainSolver(object):
 
         # Set up integration domain
         dV = Measure("dx", domain=self.VUR.sub_space(0).mesh())
-        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh())
-        dT = Measure("dx", domain=self.VUR.sub_space(2).mesh())
+        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh(), subdomain_data=self._heart_cells)
+
 
         # Set-up variational problem
         a = v * w * dV \
             + theta * k_n * (dot(M_i * grad(v), grad(w)) * dV) \
             + k_n * (dot(M_i * grad(u), grad(w)) * dV) \
-            + k_n * (dot(M_i * grad(v), grad(q)) * dV) \
-            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dU) \
-            + (k_n/theta) * (dot((M_T) * grad(u), grad(q)) * dT)
+            + k_n * (dot(M_i * grad(v), grad(q)) * dU(1)) \
+            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dU(1)) \
+            + (k_n/theta) * (dot((M_T) * grad(u), grad(q)) * dU(0))
 
         L = (self.v_ * w * dV) \
             - (1. - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dV) \
-            - ((1. - theta)/theta) * (dot(M_i * grad(self.v_), grad(q)) * dV) \
-            + rhs
+            - ((1. - theta)/theta) * k_n * (dot(M_i * grad(self.v_), grad(q)) * dU(1)) \
+            + k_n*rhs
 
 
         if use_R:
@@ -319,11 +328,11 @@ class BasicBidomainSolver(object):
 class BidomainSolver(BasicBidomainSolver):
     __doc__ = BasicBidomainSolver.__doc__
 
-    def __init__(self, mesh, heart_mesh, torso_mesh, time, M_i, M_e, M_T, I_s=None, I_a=None, v_=None,
+    def __init__(self, mesh, heart_mesh, time, M_i, M_e, M_T, I_s=None, I_a=None, v_=None,
                  params=None):
 
         # Call super-class
-        BasicBidomainSolver.__init__(self, mesh, heart_mesh, torso_mesh, time, M_i, M_e, M_T,
+        BasicBidomainSolver.__init__(self, mesh, heart_mesh, time, M_i, M_e, M_T,
                                      I_s=I_s, I_a=I_a, v_=v_,
                                      params=params)
 
@@ -396,31 +405,30 @@ class BidomainSolver(BasicBidomainSolver):
         # Define variational formulation
         use_R = self.parameters["use_avg_u_constraint"]
         if use_R:
-             (v, u, o, l) = TrialFunctions(self.VUR)
-             (w, q, b, lamda) = TestFunctions(self.VUR)
+             (v, u, l) = TrialFunctions(self.VUR)
+             (w, q, lamda) = TestFunctions(self.VUR)
         else:
-            (v, u, o) = TrialFunctions(self.VUR)
-            (w, q, b) = TestFunctions(self.VUR)
+            (v, u) = TrialFunctions(self.VUR)
+            (w, q) = TestFunctions(self.VUR)
 
         # Set-up measure and rhs from stimulus
         (dz, rhs) = rhs_with_markerwise_field(self._I_s, self._heart_mesh, w)
 
         # Set up integration domain
         dV = Measure("dx", domain=self.VUR.sub_space(0).mesh())
-        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh())
-        dT = Measure("dx", domain=self.VUR.sub_space(2).mesh())
+        dU = Measure("dx", domain=self.VUR.sub_space(1).mesh(), subdomain_data=self._heart_cells)
 
         # Set-up variational problem
         a = v * w * dV \
             + theta * k_n * (dot(M_i * grad(v), grad(w)) * dV) \
             + k_n * (dot(M_i * grad(u), grad(w)) * dV) \
             + k_n * (dot(M_i * grad(v), grad(q)) * dV) \
-            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dV) \
-            + (k_n/theta) * (dot((M_T) * grad(u), grad(b)) * dT)
+            + (k_n/theta) * (dot((M_i + M_e) * grad(u), grad(q)) * dU(1)) \
+            + (k_n/theta) * (dot((M_T) * grad(u), grad(q)) * dU(0))
 
         L = (self.v_ * w * dV) \
             - (1. - theta) * k_n * (dot(M_i * grad(self.v_), grad(w)) * dV) \
-            - ((1. - theta)/theta) * k_n * (dot(M_i * grad(self.v_), grad(q)) * dV) \
+            - ((1. - theta)/theta) * k_n * (dot(M_i * grad(self.v_), grad(q)) * dU(1)) \
             + k_n*rhs
 
 
