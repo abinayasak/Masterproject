@@ -35,18 +35,25 @@ if cbcbeat.dolfin_adjoint:
     parameters["adjoint"]["stop_annotating"] = True
 
 # Define the computational domain
-mesh = Mesh('pre_torso.xml')
-
+mesh = Mesh('mesh/pre_torso.xml')
 marker = MeshFunction("size_t", mesh, mesh.topology().dim(), mesh.domains())
-heart_mesh = MeshView.create(marker, 2)
-torso_mesh = MeshView.create(marker, 1)
+
+refined_mesh = adapt(mesh)
+refined_marker = adapt(marker, refined_mesh)
+
+heart_mesh = MeshView.create(refined_marker, 2)
+torso_mesh = MeshView.create(refined_marker, 1)
+
+vtkfile = File('mesh/submesh_torsomesh.xml')
+vtkfile << heart_mesh
+
 
 
 def setup_conductivities(mesh, chi, C_m):
     # Load fibers and sheets
     Vv = VectorFunctionSpace(mesh, "DG", 0)
     fiber = Function(Vv)
-    File("fiber.xml") >> fiber
+    File("fibers/fiber.xml") >> fiber
 
     # Extract stored conductivity data.
     V = FunctionSpace(mesh, "CG", 1)
@@ -74,24 +81,13 @@ def setup_conductivities(mesh, chi, C_m):
 
     return M_i, M_e
 
-
-# Define the conductivity (tensors)
-"""sigma_e = 1.65                      # [Sm^-1]
-sigma_i = 1.00                      # [Sm^-1]
-chi = 1400                          # [cm^-1]       torso mesh
-C_m = 1.0                           # [mu*F*cm−2]   torso mesh
-M_i = (sigma_i)/(C_m*chi)
-M_e = (sigma_e)/(C_m*chi)
-M_T = 0.25*M_e
-"""
-
 chi = 400
 C_m = 1.0
 
 M_i, M_e = setup_conductivities(heart_mesh, chi, C_m)
 M_T = 1.0/(C_m*chi)
 
-# Pick a cell model (see supported_cell_models for tested ones)
+
 #cell_model = Tentusscher_panfilov_2006_epi_cell()
 cell_model = FitzHughNagumoManual()
 
@@ -132,13 +128,15 @@ I_s3 = Expression("time >= start ? (time <= (duration + start) ? amplitude : 0.0
 # Store input parameters in cardiac model
 stimulus = Markerwise((I_s1,I_s2,I_s3), (1,2,3), S1_markers)
 
+#print(stimulus.markers())
+
 # Collect this information into the CardiacModel class
-cardiac_model = CardiacModel(mesh, heart_mesh, torso_mesh, time, M_i, M_e, M_T, cell_model, stimulus)
+cardiac_model = CardiacModel(refined_mesh, heart_mesh, time, M_i, M_e, M_T, cell_model, stimulus)
 
 # Customize and create a splitting solver
 ps = SplittingSolver.default_parameters()
 ps['apply_stimulus_current_to_pde'] = True
-ps["theta"] = 0.5
+ps["theta"] = 1.0
 ps["pde_solver"] = "bidomain"
 ps["CardiacODESolver"]["scheme"] = "RL1" # 1st order Rush-Larsen for the ODEs
 
@@ -149,10 +147,11 @@ solver = SplittingSolver(cardiac_model, params=ps)
 vs_.assign(cell_model.initial_conditions())
 
 # Time stepping parameters
-N = 500
-T = 1100.
+N = 200
+T = 900.
+#dt = 0.25
 dt = T/N
-print(dt)
+#N = int(T/dt)
 interval = (0.0, T)
 
 
@@ -162,6 +161,9 @@ out_u = File("paraview_cbcbeat/bidomain_u.pvd")
 count = 0
 u_difference = np.zeros((2,N))
 t = np.zeros(N)
+plot_figures = True
+#plot_meshes = [dt*500, dt*1500, dt*2000, dt*3500]
+plot_meshes = [dt*(N/4.), dt*(N/3.), dt*(N/2.), dt*(N/1.)]
 for (timestep, fields) in solver.solve(interval, dt):
     print("(t_0, t_1) = (%g, %g)", timestep)
     # Extract the components of the field (vs_ at previous timestep,
@@ -171,19 +173,39 @@ for (timestep, fields) in solver.solve(interval, dt):
     t[count] = timestep[1]
     u_difference[0][count] = vur.sub(1)(10,19.1) - vur.sub(1)(10,0.4)
     u_difference[1][count] = vur.sub(1)(2,10) - vur.sub(1)(25.5,10)
-    print(u_difference[0][count], u_difference[1][count])
+    #print(u_difference[0][count], u_difference[1][count])
     count += 1
     out_v << vur.sub(0)
     out_u << vur.sub(1)
+
+    if plot_figures == True:
+        for time in plot_meshes:
+            if timestep[0] == time:
+                plt.figure()
+                c = plot(vur.sub(0), title="v at time=%d ms" %(time), mode='color', vmin=-100, vmax=50)
+                c.set_cmap("jet")
+                plt.colorbar(c, fraction=0.043, pad=0.009)
+                plt.savefig("plots_cbcbeat/torsomesh_v_%d.png" %(time))
+                plt.figure()
+                c = plot(vur.sub(1), title="u_e at time=%d ms" %(time), mode='color', vmin=-100, vmax=50)
+                c.set_cmap("jet")
+                plt.colorbar(c, fraction=0.034, pad=0.009)
+                plt.savefig("plots_cbcbeat/torsomesh_u_e_%d.png" %(time))
+
+
+
+
+
 
 def plot_ECG():
     plt.figure()
     plt.plot(t, u_difference[0], "m", label="Normal: top-to-bottom")
     plt.plot(t, u_difference[1], "k", label="Normal: left-to-right")
+    plt.axis([0,900,-15,15])
     plt.xlabel("ms")
     plt.ylabel("mV")
     plt.title("Potential difference")
     plt.legend()
     plt.savefig("plots_cbcbeat/ecg_plot.png")
 
-#plot_ECG()
+plot_ECG()

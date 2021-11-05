@@ -154,7 +154,6 @@ def run_solver(make_gif, dimension):
     H = FunctionSpace(submesh, "CG", 1) # Heart
     W = MixedFunctionSpace(H,V)
 
-
     solutions = Function(W)
 
     f = Expression("5*exp(-(pow(x[0] - 0.5, 2) + pow(x[1] - 0.55, 2)) / 0.02)", degree=2)
@@ -239,7 +238,7 @@ def run_solver(make_gif, dimension):
 
 
 if __name__ == "__main__":
-    run_solver(make_gif=True, dimension="2D")
+    run_solver(make_gif=False, dimension="2D")
 
 
     """

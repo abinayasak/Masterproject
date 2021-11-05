@@ -33,8 +33,7 @@ if cbcbeat.dolfin_adjoint:
     parameters["adjoint"]["stop_annotating"] = True
 
 # Define the computational domain
-mesh = UnitSquareMesh(33, 33)
-
+mesh = UnitSquareMesh(5, 5)
 
 time = Constant(0.0)
 
