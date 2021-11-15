@@ -339,14 +339,11 @@ class BasicSplittingSolver:
 
         # If first order splitting, we need to ensure that self.vs is
         # up to date, but otherwise we are done.
-        #print(' vs[0][0]:', self.vs.sub(0).vector()[0])
-        #print('vur[0][0]:', self.vur.sub(0).vector()[0])
         if theta == 1.0:
             # Assumes that the v part of its vur and the s part of its
             # vs are in the correct state, provides input argument(in
             # this case self.vs) in its correct state
             self.merge(self.vs)
-            #print(' vs[0][0]:', self.vs.sub(0).vector()[0])
             return
 
         # Otherwise, we do another ode_step:
